@@ -21,17 +21,17 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     let mut buf2: Vec<u8> = Vec::with_capacity(1000 * 1024);
     loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) => match e.name() {
-                b"title" => match reader.read_event(&mut buf) {
-                    Ok(Event::Text(ref t)) => {
+        match reader.read_event(&mut buf).unwrap() {
+            Event::Start(ref e) => match e.name() {
+                b"title" => match reader.read_event(&mut buf).unwrap() {
+                    Event::Text(ref t) => {
                         let unescaped = &t.unescaped().unwrap();
                         let title = from_unicode(unescaped);
                         loop {
-                            match reader.read_event(&mut buf2) {
-                                Ok(Event::Start(ref e)) => match e.name() {
-                                    b"ns" => match reader.read_event(&mut buf2) {
-                                        Ok(Event::Text(ref t)) => {
+                            match reader.read_event(&mut buf2).unwrap() {
+                                Event::Start(ref e) => match e.name() {
+                                    b"ns" => match reader.read_event(&mut buf2).unwrap() {
+                                        Event::Text(ref t) => {
                                             let unescaped = &t.unescaped().unwrap();
                                             let ns = from_unicode(unescaped);
                                             if !namespaces.is_empty() && !namespaces.iter().any(|&i| i == ns) {
@@ -42,8 +42,8 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                                             panic!("Text expected");
                                         }
                                     },
-                                    b"text" => match reader.read_event(&mut buf2) {
-                                        Ok(Event::Text(ref t)) => {
+                                    b"text" => match reader.read_event(&mut buf2).unwrap() {
+                                        Event::Text(ref t) => {
                                             let unescaped = &t.unescaped().unwrap();
                                             let text = from_unicode(unescaped);
                                             if re.is_match(text) {
@@ -55,9 +55,9 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                                             panic!("Text expected");
                                         }
                                     },
-                                    _tag => { /* ignore */ }
+                                    _other_tag => { /* ignore */ }
                                 },
-                                _ => { /* ignore */ }
+                                _other_event => { /* ignore */ }
                             }
                         }
                         buf2.clear();
@@ -68,10 +68,10 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                 },
                 _tag => {}
             },
-            Ok(Event::Eof) => {
+            Event::Eof => {
                 break;
             }
-            _ => (),
+            _other_event => (),
         }
         buf.clear();
     }
