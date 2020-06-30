@@ -27,7 +27,6 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                     Event::Text(ref t) => {
                         title.clear();
                         title.push_str(from_unicode(&t.unescaped().unwrap()));
-                        reader.read_to_end(b"title", &mut buf).unwrap();
                     }
                     _ => {
                         panic!("Text expected");
@@ -37,10 +36,8 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                     Event::Text(ref t) => {
                         let unescaped = &t.unescaped().unwrap();
                         let ns = from_unicode(unescaped);
-                        if namespaces.is_empty() || namespaces.iter().any(|&i| i == ns) {
+                        if !namespaces.is_empty() && !namespaces.iter().any(|&i| i == ns) {
                             // skip this page
-                            reader.read_to_end(b"ns", &mut buf).unwrap();
-                        } else {
                             reader.read_to_end(b"page", &mut buf).unwrap();
                         }
                     }
