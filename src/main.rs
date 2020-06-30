@@ -1,3 +1,9 @@
+// wikidumpgrep
+//
+// (C) 2020 Count Count
+//
+// Distributed under the terms of the MIT license.
+
 use clap::{App, Arg};
 use quick_xml::events::Event;
 use quick_xml::Reader;
