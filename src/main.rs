@@ -23,40 +23,37 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
     loop {
         match reader.read_event(&mut buf).unwrap() {
             Event::Start(ref e) => match e.name() {
-                b"title" => match reader.read_event(&mut buf).unwrap() {
-                    Event::Text(ref t) => {
+                b"title" => {
+                    if let Event::Text(ref t) = reader.read_event(&mut buf).unwrap() {
                         title.clear();
                         title.push_str(from_unicode(&t.unescaped().unwrap()));
-                    }
-                    _ => {
+                    } else {
                         panic!("Text expected");
                     }
-                },
-                b"ns" => match reader.read_event(&mut buf).unwrap() {
-                    Event::Text(ref t) => {
+                }
+                b"ns" => {
+                    if let Event::Text(ref t) = reader.read_event(&mut buf).unwrap() {
                         let unescaped = &t.unescaped().unwrap();
                         let ns = from_unicode(unescaped);
                         if !namespaces.is_empty() && !namespaces.iter().any(|&i| i == ns) {
                             // skip this page
                             reader.read_to_end(b"page", &mut buf).unwrap();
                         }
-                    }
-                    _ => {
+                    } else {
                         panic!("Text expected");
                     }
-                },
-                b"text" => match reader.read_event(&mut buf).unwrap() {
-                    Event::Text(ref t) => {
+                }
+                b"text" => {
+                    if let Event::Text(ref t) = reader.read_event(&mut buf).unwrap() {
                         let unescaped = &t.unescaped().unwrap();
                         let text = from_unicode(unescaped);
                         if re.is_match(text) {
                             println!("* [[{}]]", title);
                         }
-                    }
-                    _ => {
+                    } else {
                         panic!("Text expected");
                     }
-                },
+                }
                 _other_tag => { /* ignore */ }
             },
             Event::Eof => {
