@@ -19,18 +19,18 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
     let mut reader = Reader::from_file(dump_file).unwrap();
 
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
-    let mut buf2: Vec<u8> = Vec::with_capacity(1000 * 1024);
+    let mut title: String = String::with_capacity(10000);
     loop {
         match reader.read_event(&mut buf).unwrap() {
             Event::Start(ref e) => match e.name() {
                 b"title" => match reader.read_event(&mut buf).unwrap() {
                     Event::Text(ref t) => {
-                        let unescaped = &t.unescaped().unwrap();
-                        let title = from_unicode(unescaped);
+                        title.clear();
+                        title.push_str(from_unicode(&t.unescaped().unwrap()));
                         loop {
-                            match reader.read_event(&mut buf2).unwrap() {
+                            match reader.read_event(&mut buf).unwrap() {
                                 Event::Start(ref e) => match e.name() {
-                                    b"ns" => match reader.read_event(&mut buf2).unwrap() {
+                                    b"ns" => match reader.read_event(&mut buf).unwrap() {
                                         Event::Text(ref t) => {
                                             let unescaped = &t.unescaped().unwrap();
                                             let ns = from_unicode(unescaped);
@@ -42,7 +42,7 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                                             panic!("Text expected");
                                         }
                                     },
-                                    b"text" => match reader.read_event(&mut buf2).unwrap() {
+                                    b"text" => match reader.read_event(&mut buf).unwrap() {
                                         Event::Text(ref t) => {
                                             let unescaped = &t.unescaped().unwrap();
                                             let text = from_unicode(unescaped);
@@ -60,7 +60,7 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
                                 _other_event => { /* ignore */ }
                             }
                         }
-                        buf2.clear();
+                        buf.clear();
                     }
                     _ => {
                         panic!("Text expected");
