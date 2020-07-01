@@ -82,10 +82,11 @@ fn main() {
                 .required(true),
         )
         .arg(
-            Arg::with_name("namespace")
+            Arg::with_name("namespaces")
                 .long("ns")
                 .takes_value(true)
-                .help("restrict search to those namespace (numeric)"),
+                .use_delimiter(true)
+                .help("restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(
             Arg::with_name("verbose")
