@@ -18,7 +18,7 @@ fn from_unicode(s: &[u8]) -> &str {
 
 fn read_text_unwrap<'a, 'b, T: BufRead>(reader: &'a mut Reader<T>, buf: &'b mut Vec<u8>) -> BytesText<'b> {
     if let Event::Text(t) = reader.read_event(buf).unwrap() {
-        return t;
+        t
     } else {
         panic!("Text expected");
     }
