@@ -10,6 +10,8 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use regex::RegexBuilder;
 use std::borrow::Cow;
+use std::fs;
+use std::time::Instant;
 use std::{io::BufRead, str::from_utf8_unchecked};
 
 fn from_unicode(s: &[u8]) -> &str {
@@ -89,11 +91,30 @@ fn main() {
                 .takes_value(true)
                 .help("restrict search to those namespace (numeric)"),
         )
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .help("print performance statistics"),
+        )
         .get_matches();
     let namespaces: Vec<&str> = matches.values_of("namespace").unwrap_or_default().collect();
+
+    let dump_len = fs::metadata(matches.value_of("dump file").unwrap()).unwrap().len();
+
+    let now = Instant::now();
     read_dump(
         matches.value_of("search term").unwrap(),
         matches.value_of("dump file").unwrap(),
         namespaces,
     );
+    let elapsed_seconds = now.elapsed().as_secs_f32();
+    let mib_read = dump_len as f32 / 1024.0 / 1024.0;
+    if matches.is_present("verbose") {
+        eprintln!(
+            "Searched {} MiB in {} seconds ({} MiB/s).",
+            mib_read,
+            elapsed_seconds,
+            mib_read / elapsed_seconds
+        );
+    }
 }
