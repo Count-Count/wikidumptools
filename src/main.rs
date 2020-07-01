@@ -5,13 +5,27 @@
 // Distributed under the terms of the MIT license.
 
 use clap::{App, Arg};
+use quick_xml::events::BytesText;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use regex::RegexBuilder;
-use std::str::from_utf8_unchecked;
+use std::borrow::Cow;
+use std::{io::BufRead, str::from_utf8_unchecked};
 
 fn from_unicode(s: &[u8]) -> &str {
     unsafe { from_utf8_unchecked(s) }
+}
+
+fn read_text_unwrap<'a, 'b, T: BufRead>(reader: &'a mut Reader<T>, buf: &'b mut Vec<u8>) -> BytesText<'b> {
+    if let Event::Text(t) = reader.read_event(buf).unwrap() {
+        return t;
+    } else {
+        panic!("Text expected");
+    }
+}
+
+pub fn unescape_unwrap<'a>(text: &'a BytesText) -> Cow<'a, [u8]> {
+    text.unescaped().unwrap()
 }
 
 fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
@@ -24,34 +38,27 @@ fn read_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
         match reader.read_event(&mut buf).unwrap() {
             Event::Start(ref e) => match e.name() {
                 b"title" => {
-                    if let Event::Text(ref t) = reader.read_event(&mut buf).unwrap() {
-                        title.clear();
-                        title.push_str(from_unicode(&t.unescaped().unwrap()));
-                    } else {
-                        panic!("Text expected");
-                    }
+                    let escaped_text = read_text_unwrap(&mut reader, &mut buf);
+                    let unescaped_text = unescape_unwrap(&escaped_text);
+                    let text = from_unicode(&unescaped_text);
+                    title.clear();
+                    title.push_str(text);
                 }
                 b"ns" => {
-                    if let Event::Text(ref t) = reader.read_event(&mut buf).unwrap() {
-                        let unescaped = &t.unescaped().unwrap();
-                        let ns = from_unicode(unescaped);
-                        if !namespaces.is_empty() && !namespaces.iter().any(|&i| i == ns) {
-                            // skip this page
-                            reader.read_to_end(b"page", &mut buf).unwrap();
-                        }
-                    } else {
-                        panic!("Text expected");
+                    let escaped_text = read_text_unwrap(&mut reader, &mut buf);
+                    let unescaped_text = unescape_unwrap(&escaped_text);
+                    let text = from_unicode(&unescaped_text);
+                    if !namespaces.is_empty() && !namespaces.iter().any(|&i| i == text) {
+                        // skip this page
+                        reader.read_to_end(b"page", &mut buf).unwrap();
                     }
                 }
                 b"text" => {
-                    if let Event::Text(ref t) = reader.read_event(&mut buf).unwrap() {
-                        let unescaped = &t.unescaped().unwrap();
-                        let text = from_unicode(unescaped);
-                        if re.is_match(text) {
-                            println!("* [[{}]]", title);
-                        }
-                    } else {
-                        panic!("Text expected");
+                    let escaped_text = read_text_unwrap(&mut reader, &mut buf);
+                    let unescaped_text = unescape_unwrap(&escaped_text);
+                    let text = from_unicode(&unescaped_text);
+                    if re.is_match(text) {
+                        println!("* [[{}]]", title);
                     }
                 }
                 _other_tag => { /* ignore */ }
