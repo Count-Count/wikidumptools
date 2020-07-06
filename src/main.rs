@@ -91,6 +91,7 @@ fn main() {
         .arg(
             Arg::with_name("verbose")
                 .short("v")
+                .long("verbose")
                 .help("print performance statistics"),
         )
         .get_matches();
