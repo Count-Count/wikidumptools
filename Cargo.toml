@@ -13,3 +13,10 @@ clap = "2.33.1"
 
 [profile.release]
 lto = true
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "bench"
+harness = false
