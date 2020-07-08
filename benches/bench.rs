@@ -12,7 +12,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
     let mut group = c.benchmark_group("file-io");
     group
         .sample_size(10)
@@ -22,7 +22,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     static KB: usize = 1024;
     static MB: usize = KB * 1024;
-    for buf_size in [8 * KB, 128 * KB, 1 * MB, 8 * MB, 128 * MB].iter() {
+    for buf_size in [MB, 2 * MB, 16 * MB, 32 * MB].iter() {
         group.bench_with_input(BenchmarkId::new("file-reading", buf_size), &buf_size, |b, &buf_size| {
             b.iter(|| test_dump_reading(*buf_size));
         });
@@ -30,7 +30,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, criterion_benchmark);
+criterion_group!(benches, criterion_benchmark_file_reading);
 criterion_main!(benches);
 
 fn get_dump_path() -> PathBuf {
