@@ -11,6 +11,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use wikidumpgrep::search_dump;
 
 pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
     let mut group = c.benchmark_group("file-io");
@@ -30,7 +31,21 @@ pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, criterion_benchmark_file_reading);
+pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dump-search");
+    group
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(10))
+        .measurement_time(Duration::from_secs(140))
+        .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
+
+    group.bench_function("simple-search", |b| {
+        b.iter(|| test_dump_searching());
+    });
+    group.finish();
+}
+
+criterion_group!(benches, criterion_benchmark_simple_search);
 criterion_main!(benches);
 
 fn get_dump_path() -> PathBuf {
@@ -53,4 +68,8 @@ fn test_dump_reading(buf_size: usize) {
         }
         reader.consume(length);
     }
+}
+
+fn test_dump_searching() {
+    search_dump("adsdfdeas", get_dump_path().to_str().unwrap(), vec!["0"]);
 }
