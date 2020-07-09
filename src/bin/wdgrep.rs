@@ -42,7 +42,7 @@ fn main() {
     search_dump(
         matches.value_of("search term").unwrap(),
         matches.value_of("dump file").unwrap(),
-        namespaces,
+        &namespaces,
     );
     let elapsed_seconds = now.elapsed().as_secs_f32();
     let mib_read = dump_len as f32 / 1024.0 / 1024.0;

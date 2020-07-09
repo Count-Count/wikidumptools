@@ -71,5 +71,5 @@ fn test_dump_reading(buf_size: usize) {
 }
 
 fn test_dump_searching() {
-    search_dump("adsdfdeas", get_dump_path().to_str().unwrap(), vec!["0"]);
+    search_dump("xyabcdefghijk", get_dump_path().to_str().unwrap(), &vec!["0"]);
 }

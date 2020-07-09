@@ -26,7 +26,7 @@ where
     }
 }
 
-pub fn search_dump(regex: &str, dump_file: &str, namespaces: Vec<&str>) {
+pub fn search_dump(regex: &str, dump_file: &str, namespaces: &Vec<&str>) {
     let re = RegexBuilder::new(regex).build().unwrap();
     let mut reader = Reader::from_file(dump_file).unwrap();
 
