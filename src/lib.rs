@@ -7,7 +7,8 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use regex::RegexBuilder;
-use std::{io::BufRead, str::from_utf8_unchecked};
+use std::fs::File;
+use std::{io::BufRead, io::BufReader, str::from_utf8_unchecked};
 
 fn from_unicode(s: &[u8]) -> &str {
     unsafe { from_utf8_unchecked(s) }
@@ -28,7 +29,10 @@ where
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &Vec<&str>) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let mut reader = Reader::from_file(dump_file).unwrap();
+    let buf_size = 4 * 1024 * 1024;
+    let file = File::open(&dump_file).unwrap();
+    let buf_reader = BufReader::with_capacity(buf_size, file);
+    let mut reader = Reader::from_reader(buf_reader);
 
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     let mut title: String = String::with_capacity(10000);
