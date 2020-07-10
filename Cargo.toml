@@ -16,7 +16,7 @@ version = "0.2"
 features = [] # stats, debug, ...
 
 [profile.release]
-lto = true
+lto = false
 
 [dev-dependencies]
 criterion = "0.3"
