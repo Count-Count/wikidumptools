@@ -10,6 +10,9 @@ use regex::RegexBuilder;
 use std::fs::File;
 use std::{io::BufRead, io::BufReader, str::from_utf8_unchecked};
 
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+
 fn from_unicode(s: &[u8]) -> &str {
     unsafe { from_utf8_unchecked(s) }
 }
