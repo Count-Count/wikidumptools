@@ -75,6 +75,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cc"
+version = "1.0.58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9a06fb2e53271d7c279ec1efea6ab691c35a2ae67ec0d91d7acec0caf13b518"
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -93,6 +99,15 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
+]
+
+[[package]]
+name = "cmake"
+version = "0.1.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e56268c17a6248366d66d4a47a3381369d068cce8409bb1716ed77ea32163bb"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -488,6 +503,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "snmalloc-rs"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38b352fbc8693255a3c5884025b113b079fc794d64b61f949b9ea1312d50c28a"
+dependencies = [
+ "snmalloc-sys",
+]
+
+[[package]]
+name = "snmalloc-sys"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a85f414cc62d798da4dfb5dadebc4f9f1e59cae824f5cd64eec45d2eb5b77dae"
+dependencies = [
+ "cmake",
+ "libc",
+]
+
+[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -633,6 +667,7 @@ dependencies = [
  "criterion",
  "quick-xml",
  "regex",
+ "snmalloc-rs",
 ]
 
 [[package]]
