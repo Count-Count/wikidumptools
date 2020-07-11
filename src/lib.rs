@@ -30,7 +30,7 @@ where
     }
 }
 
-pub fn search_dump(regex: &str, dump_file: &str, namespaces: &Vec<&str>) {
+pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
     let buf_size = 4 * 1024 * 1024;
     let file = File::open(&dump_file).unwrap();
