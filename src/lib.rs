@@ -59,7 +59,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                 b"text" => {
                     read_text_and_then(&mut reader, &mut buf, |text| {
                         if re.is_match(text) {
-                            println!("* [[{}]]", title);
+                            println!("* [[{}]]", title.as_str());
                         }
                     });
                 }
