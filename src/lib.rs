@@ -32,7 +32,7 @@ where
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let buf_size = 4 * 1024 * 1024;
+    let buf_size = 2 * 1024 * 1024;
     let file = File::open(&dump_file).unwrap();
     let buf_reader = BufReader::with_capacity(buf_size, file);
     let mut reader = Reader::from_reader(buf_reader);
