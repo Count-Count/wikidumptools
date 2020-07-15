@@ -34,7 +34,11 @@ fn main() {
                 .help("print performance statistics"),
         )
         .get_matches();
-    let namespaces: Vec<&str> = matches.values_of("namespaces").unwrap_or_default().collect();
+    let namespaces: Vec<&str> = matches
+        .values_of("namespaces")
+        .unwrap_or_default()
+        .map(|s| s.trim())
+        .collect();
 
     let dump_len = fs::metadata(matches.value_of("dump file").unwrap()).unwrap().len();
 
