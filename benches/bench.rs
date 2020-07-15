@@ -48,7 +48,7 @@ pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
     group
         .sample_size(10)
         .warm_up_time(Duration::from_secs(10))
-        .measurement_time(Duration::from_secs(140))
+        .measurement_time(Duration::from_secs(200))
         .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
 
     group.bench_function("simple-search", |b| {
