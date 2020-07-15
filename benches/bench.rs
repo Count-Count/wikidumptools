@@ -23,7 +23,19 @@ pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
 
     static KB: usize = 1024;
     static MB: usize = KB * 1024;
-    for buf_size in [MB, 2 * MB, 16 * MB, 32 * MB].iter() {
+    for buf_size in [
+        16 * KB,
+        128 * KB,
+        512 * KB,
+        1 * MB,
+        2 * MB,
+        4 * MB,
+        8 * MB,
+        16 * MB,
+        32 * MB,
+    ]
+    .iter()
+    {
         group.bench_with_input(BenchmarkId::new("file-reading", buf_size), &buf_size, |b, &buf_size| {
             b.iter(|| test_dump_reading(*buf_size));
         });
