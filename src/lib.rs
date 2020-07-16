@@ -4,6 +4,7 @@
 //
 // Distributed under the terms of the MIT license.
 
+use memchr::{memchr, memrchr};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use regex::RegexBuilder;
@@ -39,6 +40,8 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
 
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     let mut title: String = String::with_capacity(10000);
+
+    let only_print_title = false; // TODO: param
     loop {
         match reader.read_event(&mut buf).unwrap() {
             Event::Start(ref e) => match e.name() {
@@ -58,8 +61,42 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                 }
                 b"text" => {
                     read_text_and_then(&mut reader, &mut buf, |text| {
-                        if re.is_match(text) {
-                            println!("* [[{}]]", title.as_str());
+                        if only_print_title {
+                            if re.is_match(text) {
+                                println!("* [[{}]]", title.as_str());
+                            }
+                        } else {
+                            let mut line_start_preceding_last_match: usize = 0;
+                            let mut last_printed_lines_start: i64 = -1;
+                            let mut last_printed_lines_end: i64 = -1;
+                            let mut first_match = true;
+                            for m in re.find_iter(text) {
+                                if first_match {
+                                    first_match = false;
+                                    println!("* [[{}]]", title.as_str());
+                                }
+                                let lines_start = match memrchr(
+                                    b'\n',
+                                    &text.as_bytes()[line_start_preceding_last_match..m.start()],
+                                ) {
+                                    None => line_start_preceding_last_match,
+                                    Some(newline_char_pos) => line_start_preceding_last_match + newline_char_pos + 1,
+                                };
+                                line_start_preceding_last_match = lines_start;
+                                let lines_end = match memchr(b'\n', &text.as_bytes()[m.end()..]) {
+                                    None => text.len(),
+                                    Some(newline_char_pos) => m.end() + newline_char_pos,
+                                };
+
+                                // only print each region once
+                                if last_printed_lines_start != lines_start as i64
+                                    || last_printed_lines_end != lines_end as i64
+                                {
+                                    println!("{}", &text[lines_start..lines_end]);
+                                    last_printed_lines_start = lines_start as i64;
+                                    last_printed_lines_end = lines_end as i64;
+                                }
+                            }
                         }
                     });
                 }
