@@ -7,7 +7,7 @@
 use memchr::{memchr, memrchr};
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use regex::RegexBuilder;
+use regex::{Match, RegexBuilder};
 use std::fs::File;
 use std::{io::BufRead, io::BufReader, str::from_utf8_unchecked};
 
@@ -69,12 +69,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                             let mut line_start_preceding_last_match: usize = 0;
                             let mut last_printed_lines_start: i64 = -1;
                             let mut last_printed_lines_end: i64 = -1;
-                            let mut first_match = true;
-                            for m in re.find_iter(text) {
-                                if first_match {
-                                    first_match = false;
-                                    println!("* [[{}]]", title.as_str());
-                                }
+                            let mut process_match_func = |m: Match| {
                                 let lines_start = match memrchr(
                                     b'\n',
                                     &text.as_bytes()[line_start_preceding_last_match..m.start()],
@@ -95,6 +90,14 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                                     println!("{}", &text[lines_start..lines_end]);
                                     last_printed_lines_start = lines_start as i64;
                                     last_printed_lines_end = lines_end as i64;
+                                }
+                            };
+                            let mut iter = re.find_iter(text);
+                            if let Some(m) = iter.next() {
+                                println!("* [[{}]]", title.as_str());
+                                process_match_func(m);
+                                for m in iter {
+                                    process_match_func(m);
                                 }
                             }
                         }
