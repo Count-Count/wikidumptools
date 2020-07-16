@@ -37,7 +37,7 @@ fn main() {
     let namespaces: Vec<&str> = matches
         .values_of("namespaces")
         .unwrap_or_default()
-        .map(|s| s.trim())
+        .map(str::trim)
         .collect();
 
     let dump_len = fs::metadata(matches.value_of("dump file").unwrap()).unwrap().len();
