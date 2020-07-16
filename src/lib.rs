@@ -78,11 +78,14 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                                     Some(newline_char_pos) => line_start_preceding_last_match + newline_char_pos + 1,
                                 };
                                 line_start_preceding_last_match = lines_start;
-                                let lines_end = match memchr(b'\n', &text.as_bytes()[m.end()..]) {
-                                    None => text.len(),
-                                    Some(newline_char_pos) => m.end() + newline_char_pos,
+                                let lines_end = if m.end() > 0 && text.as_bytes()[m.end() - 1] == b'\n' {
+                                    m.end() - 1
+                                } else {
+                                    match memchr(b'\n', &text.as_bytes()[m.end()..]) {
+                                        None => text.len(),
+                                        Some(newline_char_pos) => m.end() + newline_char_pos,
+                                    }
                                 };
-
                                 // only print each region once
                                 if last_printed_lines_start != lines_start as i64
                                     || last_printed_lines_end != lines_end as i64
