@@ -8,7 +8,7 @@ use criterion::*;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use wikidumpgrep::search_dump;
@@ -23,22 +23,32 @@ pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
 
     static KB: usize = 1024;
     static MB: usize = KB * 1024;
-    for buf_size in [
-        16 * KB,
-        128 * KB,
-        512 * KB,
-        1 * MB,
-        2 * MB,
-        4 * MB,
-        8 * MB,
-        16 * MB,
-        32 * MB,
-    ]
-    .iter()
-    {
+    for buf_size in [2 * MB].iter() {
         group.bench_with_input(BenchmarkId::new("file-reading", buf_size), &buf_size, |b, &buf_size| {
             b.iter(|| test_dump_reading(*buf_size));
         });
+    }
+    group.finish();
+}
+
+pub fn criterion_benchmark_file_reading_direct(c: &mut Criterion) {
+    let mut group = c.benchmark_group("file-io");
+    group
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(10))
+        .measurement_time(Duration::from_secs(10))
+        .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
+
+    static KB: usize = 1024;
+    static MB: usize = KB * 1024;
+    for buf_size in [2 * MB].iter() {
+        group.bench_with_input(
+            BenchmarkId::new("file-reading-direct", buf_size),
+            &buf_size,
+            |b, &buf_size| {
+                b.iter(|| test_dump_reading_direct(*buf_size));
+            },
+        );
     }
     group.finish();
 }
@@ -57,7 +67,11 @@ pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, criterion_benchmark_simple_search);
+criterion_group!(
+    benches,
+    criterion_benchmark_file_reading,
+    criterion_benchmark_file_reading_direct
+);
 criterion_main!(benches);
 
 fn get_dump_path() -> PathBuf {
@@ -79,6 +93,25 @@ fn test_dump_reading(buf_size: usize) {
             break;
         }
         reader.consume(length);
+    }
+}
+
+fn test_dump_reading_direct(buf_size: usize) {
+    let dump_path = get_dump_path();
+    let mut file = File::open(&dump_path).unwrap();
+    let mut buf: Vec<u8> = vec![0; buf_size];
+    loop {
+        match file.read(&mut buf) {
+            Ok(0) => {
+                break;
+            }
+            Ok(_n) => {
+                // ok
+            }
+            Err(_error) => {
+                panic!("Error reading file");
+            }
+        }
     }
 }
 
