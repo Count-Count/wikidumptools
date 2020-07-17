@@ -9,7 +9,9 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use regex::{Match, RegexBuilder};
 use std::fs::File;
-use std::{io::BufRead, io::BufReader, str::from_utf8_unchecked};
+use std::io::{BufRead, BufReader, Write};
+use std::str::from_utf8_unchecked;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
@@ -31,6 +33,14 @@ where
     }
 }
 
+fn set_color(stream: &mut StandardStream, c: Color) {
+    stream.set_color(ColorSpec::new().set_fg(Some(c))).unwrap();
+}
+
+fn set_plain(stream: &mut StandardStream) {
+    stream.set_color(ColorSpec::new().set_fg(None)).unwrap();
+}
+
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
     let buf_size = 2 * 1024 * 1024;
@@ -42,6 +52,9 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let mut title: String = String::with_capacity(10000);
 
     let only_print_title = false; // TODO: param
+
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
     loop {
         match reader.read_event(&mut buf).unwrap() {
             Event::Start(ref e) => match e.name() {
@@ -63,7 +76,9 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                     read_text_and_then(&mut reader, &mut buf, |text| {
                         if only_print_title {
                             if re.is_match(text) {
-                                println!("* [[{}]]", title.as_str());
+                                set_color(&mut stdout, Color::Cyan);
+                                writeln!(&mut stdout, "{}", title.as_str()).unwrap();
+                                set_plain(&mut stdout);
                             }
                         } else {
                             let mut line_start_preceding_last_match: usize = 0;
@@ -97,11 +112,14 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                             };
                             let mut iter = re.find_iter(text);
                             if let Some(m) = iter.next() {
-                                println!("* [[{}]]", title.as_str());
+                                set_color(&mut stdout, Color::Cyan);
+                                writeln!(&mut stdout, "{}", title.as_str()).unwrap();
+                                set_plain(&mut stdout);
                                 process_match_func(m);
                                 for m in iter {
                                     process_match_func(m);
                                 }
+                                writeln!(&mut stdout).unwrap();
                             }
                         }
                     });
