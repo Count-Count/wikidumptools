@@ -7,7 +7,7 @@
 use memchr::{memchr, memrchr};
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use regex::{Match, RegexBuilder};
+use regex::{Regex, RegexBuilder};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::str::from_utf8_unchecked;
@@ -81,46 +81,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                                 set_plain(&mut stdout);
                             }
                         } else {
-                            let mut line_start_preceding_last_match: usize = 0;
-                            let mut last_printed_lines_start: i64 = -1;
-                            let mut last_printed_lines_end: i64 = -1;
-                            let mut process_match_func = |m: Match| {
-                                let lines_start = match memrchr(
-                                    b'\n',
-                                    &text.as_bytes()[line_start_preceding_last_match..m.start()],
-                                ) {
-                                    None => line_start_preceding_last_match,
-                                    Some(newline_char_pos) => line_start_preceding_last_match + newline_char_pos + 1,
-                                };
-                                line_start_preceding_last_match = lines_start;
-                                let lines_end = if m.end() > 0 && text.as_bytes()[m.end() - 1] == b'\n' {
-                                    m.end() - 1
-                                } else {
-                                    match memchr(b'\n', &text.as_bytes()[m.end()..]) {
-                                        None => text.len(),
-                                        Some(newline_char_pos) => m.end() + newline_char_pos,
-                                    }
-                                };
-                                // only print each region once
-                                if last_printed_lines_start != lines_start as i64
-                                    || last_printed_lines_end != lines_end as i64
-                                {
-                                    println!("{}", &text[lines_start..lines_end]);
-                                    last_printed_lines_start = lines_start as i64;
-                                    last_printed_lines_end = lines_end as i64;
-                                }
-                            };
-                            let mut iter = re.find_iter(text);
-                            if let Some(m) = iter.next() {
-                                set_color(&mut stdout, Color::Cyan);
-                                writeln!(&mut stdout, "{}", title.as_str()).unwrap();
-                                set_plain(&mut stdout);
-                                process_match_func(m);
-                                for m in iter {
-                                    process_match_func(m);
-                                }
-                                writeln!(&mut stdout).unwrap();
-                            }
+                            find_in_page(&mut stdout, title.as_str(), text, &re);
                         }
                     });
                 }
@@ -132,5 +93,98 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
             _other_event => (),
         }
         buf.clear();
+    }
+}
+
+fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex) {
+    let mut last_match_end: usize = 0;
+    let mut first_match = true;
+    for m in re.find_iter(text) {
+        if first_match {
+            // print title
+            set_color(stdout, Color::Cyan);
+            writeln!(stdout, "{}", title).unwrap();
+            set_plain(stdout);
+            first_match = false;
+        }
+        match memrchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
+            None => {
+                // match starting on same line that the last match ended
+
+                // print text between matches
+                write!(stdout, "{}", &text[last_match_end as usize..m.start()]).unwrap();
+            }
+            Some(pos) => {
+                // match starting on a new line
+
+                // finish line from previous match
+                match memchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
+                    None => {
+                        panic!("Memchr/Memrchr inconsistency");
+                    }
+                    Some(pos) => {
+                        writeln!(stdout, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                    }
+                }
+                // print text in line preceding match
+                write!(stdout, "{}", &text[last_match_end + pos + 1..m.start()]).unwrap();
+            }
+        };
+        // print matched text
+        let actual_match_end = if m.start() < m.end() && text.as_bytes()[m.end() - 1] == b'\n' {
+            m.end() - 1
+        } else {
+            m.end()
+        };
+        set_color(stdout, Color::Red);
+        write!(stdout, "{}", &text[m.start()..actual_match_end]).unwrap();
+        set_plain(stdout);
+        last_match_end = actual_match_end;
+    }
+    if !first_match {
+        // print rest of last matching line
+        match memchr(b'\n', &text.as_bytes()[last_match_end..]) {
+            None => {
+                writeln!(stdout, "{}", &text[last_match_end..]).unwrap();
+            }
+            Some(pos) => {
+                writeln!(stdout, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+            }
+        }
+        // separate from next match
+        writeln!(stdout).unwrap();
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_print() {
+        let mut stdout = StandardStream::stdout(ColorChoice::Always);
+        find_in_page(
+            &mut stdout,
+            "title",
+            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
+            &RegexBuilder::new("Abc").build().unwrap(),
+        );
+        find_in_page(
+            &mut stdout,
+            "title",
+            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
+            &RegexBuilder::new("^").build().unwrap(),
+        );
+        find_in_page(
+            &mut stdout,
+            "title",
+            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
+            &RegexBuilder::new("Xyz\n").build().unwrap(),
+        );
+        find_in_page(
+            &mut stdout,
+            "title",
+            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
+            &RegexBuilder::new("\n").build().unwrap(),
+        );
     }
 }
