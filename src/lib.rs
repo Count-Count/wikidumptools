@@ -105,8 +105,8 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
             set_color(stdout, Color::Cyan);
             writeln!(stdout, "{}", title).unwrap();
             set_plain(stdout);
-            first_match = false;
         }
+
         match memrchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
             None => {
                 // match starting on same line that the last match ended
@@ -118,12 +118,14 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
                 // match starting on a new line
 
                 // finish line from previous match
-                match memchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
-                    None => {
-                        panic!("Memchr/Memrchr inconsistency");
-                    }
-                    Some(pos) => {
-                        writeln!(stdout, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                if !first_match {
+                    match memchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
+                        None => {
+                            panic!("Memchr/Memrchr inconsistency");
+                        }
+                        Some(pos) => {
+                            writeln!(stdout, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                        }
                     }
                 }
                 // print text in line preceding match
@@ -142,8 +144,12 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
         write!(stdout, "{}", &text[m.start()..actual_match_end]).unwrap();
         set_plain(stdout);
         last_match_end = actual_match_end;
+        if first_match {
+            first_match = false;
+        }
     }
-    if !first_match {
+    let matches_found = !first_match;
+    if matches_found {
         // print rest of last matching line
         match memchr(b'\n', &text.as_bytes()[last_match_end..]) {
             None => {
@@ -187,6 +193,12 @@ mod tests {
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("\n").build().unwrap(),
+        );
+        find_in_page(
+            &mut stdout,
+            "title",
+            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
+            &RegexBuilder::new("123").build().unwrap(),
         );
     }
 }
