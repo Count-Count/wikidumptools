@@ -12,7 +12,6 @@ regex = "1"
 clap = "2.33.1"
 memchr = "2.3.3"
 termcolor = "1.1"
-memmap = "0.7"
 
 [dependencies.snmalloc-rs]
 version = "0.2"

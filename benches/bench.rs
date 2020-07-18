@@ -5,8 +5,6 @@
 // Distributed under the terms of the MIT license.
 
 use criterion::*;
-use memchr::memchr;
-use memmap::MmapOptions;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -55,20 +53,6 @@ pub fn criterion_benchmark_file_reading_direct(c: &mut Criterion) {
     group.finish();
 }
 
-pub fn criterion_benchmark_file_reading_memmap(c: &mut Criterion) {
-    let mut group = c.benchmark_group("file-io");
-    group
-        .sample_size(10)
-        .warm_up_time(Duration::from_secs(10))
-        .measurement_time(Duration::from_secs(10))
-        .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
-
-    group.bench_function("file-reading-memmap", |b| {
-        b.iter(|| test_dump_reading_memmap());
-    });
-    group.finish();
-}
-
 pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("dump-search");
     group
@@ -83,7 +67,11 @@ pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, criterion_benchmark_file_reading_memmap);
+criterion_group!(
+    benches,
+    criterion_benchmark_file_reading,
+    criterion_benchmark_file_reading_direct
+);
 criterion_main!(benches);
 
 fn get_dump_path() -> PathBuf {
@@ -122,23 +110,6 @@ fn test_dump_reading_direct(buf_size: usize) {
             }
             Err(_error) => {
                 panic!("Error reading file");
-            }
-        }
-    }
-}
-
-fn test_dump_reading_memmap() {
-    let dump_path = get_dump_path();
-    let file = File::open(dump_path).unwrap();
-    let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
-    let mut pos: usize = 0;
-    loop {
-        match memchr(b'<', &mmap[pos..]) {
-            None => {
-                break;
-            }
-            Some(newpos) => {
-                pos = pos + newpos + 1;
             }
         }
     }
