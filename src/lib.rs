@@ -112,7 +112,7 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
                 // match starting on same line that the last match ended
 
                 // print text between matches
-                write!(stdout, "{}", &text[last_match_end as usize..m.start()]).unwrap();
+                write!(stdout, "{}", &text[last_match_end..m.start()]).unwrap();
             }
             Some(pos) => {
                 // match starting on a new line
