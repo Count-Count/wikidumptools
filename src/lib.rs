@@ -134,7 +134,7 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
         };
         // print matched text
 
-        // don't print extra newline and following lines if matches end with \n
+        // don't print extra newline and the following line if match end with \n
         let actual_match_end = if m.start() < m.end() && text.as_bytes()[m.end() - 1] == b'\n' {
             m.end() - 1
         } else {
