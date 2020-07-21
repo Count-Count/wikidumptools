@@ -5,10 +5,11 @@
 // Distributed under the terms of the MIT license.
 
 use criterion::*;
+use slice::IoSlice;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -94,20 +95,17 @@ fn test_dump_reading_in_parallel(buf_size: usize, thread_count: u32) {
     for i in 0..thread_count {
         let handle = thread::spawn(move || {
             let dump_path = get_dump_path();
-            let mut file = File::open(&dump_path).unwrap();
+            let file = File::open(&dump_path).unwrap();
             let len = fs::metadata(dump_path).unwrap().len();
             let slice_size = len / thread_count;
-            file.seek(SeekFrom::Start(i * slice_size)).unwrap();
-            let mut reader = BufReader::with_capacity(buf_size, file);
+            let slice = IoSlice::new(file, i * slice_size, slice_size).unwrap();
+            let mut reader = BufReader::with_capacity(buf_size, slice);
             let mut bytes_read = 0;
             loop {
                 let read_buf = reader.fill_buf().unwrap();
                 let length = read_buf.len();
                 bytes_read += length;
                 if length == 0 {
-                    break;
-                }
-                if bytes_read as u64 >= slice_size {
                     break;
                 }
                 reader.consume(length);
