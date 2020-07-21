@@ -8,8 +8,9 @@ use criterion::*;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::thread;
 use std::time::Duration;
 use wikidumpgrep::search_dump;
 
@@ -23,10 +24,30 @@ pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
 
     static KB: usize = 1024;
     static MB: usize = KB * 1024;
-    for buf_size in [2 * MB].iter() {
+    for buf_size in [1 * MB, 2 * MB, 4 * MB].iter() {
         group.bench_with_input(BenchmarkId::new("file-reading", buf_size), &buf_size, |b, &buf_size| {
             b.iter(|| test_dump_reading(*buf_size));
         });
+    }
+    group.finish();
+}
+
+pub fn criterion_benchmark_file_reading_in_parallel(c: &mut Criterion) {
+    let mut group = c.benchmark_group("file-io");
+    group
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(10))
+        .measurement_time(Duration::from_secs(140))
+        .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
+
+    for thread_count in [2, 4, 6, 8, 12].iter() {
+        group.bench_with_input(
+            BenchmarkId::new("file-reading-parallel", thread_count),
+            &thread_count,
+            |b, &buf_size| {
+                b.iter(|| test_dump_reading_in_parallel(2 * 1024 * 1024, *thread_count));
+            },
+        );
     }
     group.finish();
 }
@@ -67,10 +88,44 @@ pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
     group.finish();
 }
 
+fn test_dump_reading_in_parallel(buf_size: usize, thread_count: u32) {
+    let thread_count = thread_count as u64;
+    let mut thread_handles = Vec::with_capacity(thread_count as usize);
+    for i in 0..thread_count {
+        let handle = thread::spawn(move || {
+            let dump_path = get_dump_path();
+            let mut file = File::open(&dump_path).unwrap();
+            let len = fs::metadata(dump_path).unwrap().len();
+            let slice_size = len / thread_count;
+            file.seek(SeekFrom::Start(i * slice_size)).unwrap();
+            let mut reader = BufReader::with_capacity(buf_size, file);
+            let mut bytes_read = 0;
+            loop {
+                let read_buf = reader.fill_buf().unwrap();
+                let length = read_buf.len();
+                bytes_read += length;
+                if length == 0 {
+                    break;
+                }
+                if bytes_read as u64 >= slice_size {
+                    break;
+                }
+                reader.consume(length);
+            }
+        });
+        thread_handles.push(handle);
+    }
+    for handle in thread_handles {
+        handle.join().unwrap();
+    }
+}
+
 criterion_group!(
     benches,
-    criterion_benchmark_file_reading,
-    criterion_benchmark_file_reading_direct
+    // criterion_benchmark_file_reading_direct,
+    // criterion_benchmark_file_reading,
+    // criterion_benchmark_file_reading_in_parallel,
+    criterion_benchmark_simple_search
 );
 criterion_main!(benches);
 
