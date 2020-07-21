@@ -45,7 +45,7 @@ pub fn criterion_benchmark_file_reading_in_parallel(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("file-reading-parallel", thread_count),
             &thread_count,
-            |b, &buf_size| {
+            |b, &thread_count| {
                 b.iter(|| test_dump_reading_in_parallel(2 * 1024 * 1024, *thread_count));
             },
         );
