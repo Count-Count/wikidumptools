@@ -11,16 +11,12 @@ use regex::{Regex, RegexBuilder};
 use slice::IoSlice;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use std::str::from_utf8_unchecked;
+use std::str::from_utf8;
 use std::thread;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-
-fn from_unicode(s: &[u8]) -> &str {
-    unsafe { from_utf8_unchecked(s) }
-}
 
 pub fn get_split_points(dump_file: &str, parts: u64) -> Vec<u64> {
     let file = File::open(&dump_file).unwrap();
@@ -49,7 +45,7 @@ where
 {
     if let Event::Text(escaped_text) = reader.read_event(buf).unwrap() {
         let unescaped_text = escaped_text.unescaped().unwrap();
-        let text = from_unicode(&unescaped_text);
+        let text = from_utf8(&unescaped_text).unwrap();
         f(text)
     } else {
         panic!("Text expected");
@@ -87,9 +83,9 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     for i in 0..parts {
         let re_clone = re.clone();
         let dump_file_clone = dump_file.to_owned();
+        let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
         let start = split_points[i];
         let end = split_points[i + 1];
-        let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
         let handle =
             thread::spawn(move || search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone));
         thread_handles.push(handle);
