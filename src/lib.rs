@@ -80,15 +80,18 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let parts: usize = 8;
     let split_points = get_split_points(&dump_file, parts as u64);
     let mut thread_handles = Vec::with_capacity(parts as usize);
-    for i in 0..parts {
-        let re_clone = re.clone();
-        let dump_file_clone = dump_file.to_owned();
-        let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
-        let start = split_points[i];
-        let end = split_points[i + 1];
-        let handle =
-            thread::spawn(move || search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone));
-        thread_handles.push(handle);
+    for start_and_end in split_points.windows(2) {
+        if let &[start, end] = start_and_end {
+            let re_clone = re.clone();
+            let dump_file_clone = dump_file.to_owned();
+            let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
+            let handle = thread::spawn(move || {
+                search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone)
+            });
+            thread_handles.push(handle);
+        } else {
+            unreachable!();
+        }
     }
     for handle in thread_handles {
         handle.join().unwrap();
