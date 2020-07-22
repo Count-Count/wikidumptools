@@ -91,8 +91,9 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
         let start = split_points[i];
         let end = split_points[i + 1];
         let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
-        let handle =
-            thread::spawn(move || search_dump_0(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone[..]));
+        let handle = thread::spawn(move || {
+            search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone[..])
+        });
         thread_handles.push(handle);
     }
     for handle in thread_handles {
@@ -100,7 +101,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     }
 }
 
-pub fn search_dump_0(re: Regex, dump_file: &str, start: u64, end: u64, namespaces: &[String]) {
+pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namespaces: &[String]) {
     let file = File::open(&dump_file).unwrap();
     let slice = IoSlice::new(file, start, end - start).unwrap();
     let buf_size = 2 * 1024 * 1024;
