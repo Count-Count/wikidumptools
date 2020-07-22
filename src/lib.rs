@@ -22,13 +22,14 @@ fn from_unicode(s: &[u8]) -> &str {
     unsafe { from_utf8_unchecked(s) }
 }
 
-pub fn get_split_points(file: &File, parts: u64) -> Vec<u64> {
+pub fn get_split_points(dump_file: &str, parts: u64) -> Vec<u64> {
+    let file = File::open(&dump_file).unwrap();
     let len = file.metadata().unwrap().len();
     let slice_size = len / parts;
     let mut res: Vec<u64> = Vec::with_capacity(parts as usize + 1);
     res.push(0);
     for i in 1..parts {
-        let slice = IoSlice::new(file, i * slice_size, slice_size).unwrap();
+        let slice = IoSlice::new(&file, i * slice_size, slice_size).unwrap();
         let buf_reader = BufReader::with_capacity(2 * 1024 * 1024, slice);
         let mut reader = Reader::from_reader(buf_reader);
         reader.check_end_names(false);
@@ -80,11 +81,9 @@ fn set_plain(stream: &mut StandardStream) {
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let file = File::open(&dump_file).unwrap();
     let parts: usize = 8;
-    let split_points = get_split_points(&file, parts as u64);
+    let split_points = get_split_points(&dump_file, parts as u64);
     let mut thread_handles = Vec::with_capacity(parts as usize);
-    drop(file);
     for i in 0..parts {
         let re_clone = re.clone();
         let dump_file_clone = dump_file.to_owned();
