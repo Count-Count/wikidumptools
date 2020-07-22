@@ -91,9 +91,8 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
         let start = split_points[i];
         let end = split_points[i + 1];
         let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
-        let handle = thread::spawn(move || {
-            search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone[..])
-        });
+        let handle =
+            thread::spawn(move || search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone));
         thread_handles.push(handle);
     }
     for handle in thread_handles {
