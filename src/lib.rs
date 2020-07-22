@@ -77,7 +77,7 @@ fn set_plain(stream: &mut StandardStream) {
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let parts: usize = 8;
+    let parts: usize = 12;
     let split_points = get_split_points(&dump_file, parts as u64);
     let mut thread_handles = Vec::with_capacity(parts as usize);
     for start_and_end in split_points.windows(2) {
