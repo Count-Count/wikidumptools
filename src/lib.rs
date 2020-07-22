@@ -8,9 +8,11 @@ use memchr::{memchr, memrchr};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use regex::{Regex, RegexBuilder};
+use slice::IoSlice;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::str::from_utf8_unchecked;
+use std::thread;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
@@ -18,6 +20,26 @@ static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 fn from_unicode(s: &[u8]) -> &str {
     unsafe { from_utf8_unchecked(s) }
+}
+
+pub fn get_split_points(file: &File, parts: u64) -> Vec<u64> {
+    let len = file.metadata().unwrap().len();
+    let slice_size = len / parts;
+    let mut res: Vec<u64> = Vec::with_capacity(parts as usize + 1);
+    res.push(0);
+    for i in 1..parts {
+        let slice = IoSlice::new(file, i * slice_size, slice_size).unwrap();
+        let buf_reader = BufReader::with_capacity(2 * 1024 * 1024, slice);
+        let mut reader = Reader::from_reader(buf_reader);
+        reader.check_end_names(false);
+        let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
+        skip_to_start_tag(&mut reader, &mut buf, b"page");
+        let buf_pos = reader.buffer_position();
+        let file_pos = buf_pos as u64 + i * slice_size - b"<page>".len() as u64;
+        res.push(file_pos)
+    }
+    res.push(len);
+    res
 }
 
 fn read_text_and_then<T: BufRead, ResT, F>(reader: &mut Reader<T>, buf: &mut Vec<u8>, mut f: F) -> ResT
@@ -33,6 +55,21 @@ where
     }
 }
 
+fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) {
+    loop {
+        match reader.read_event(buf).unwrap() {
+            Event::Start(ref e) if e.name() == tag_name => {
+                return;
+            }
+            Event::Eof => {
+                panic!("Unexpected EOF");
+            }
+            _other_event => {}
+        }
+        buf.clear();
+    }
+}
+
 fn set_color(stream: &mut StandardStream, c: Color) {
     stream.set_color(ColorSpec::new().set_fg(Some(c))).unwrap();
 }
@@ -43,10 +80,33 @@ fn set_plain(stream: &mut StandardStream) {
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let buf_size = 2 * 1024 * 1024;
     let file = File::open(&dump_file).unwrap();
-    let buf_reader = BufReader::with_capacity(buf_size, file);
+    let parts: usize = 8;
+    let split_points = get_split_points(&file, parts as u64);
+    let mut thread_handles = Vec::with_capacity(parts as usize);
+    drop(file);
+    for i in 0..parts {
+        let re_clone = re.clone();
+        let dump_file_clone = dump_file.to_owned();
+        let start = split_points[i];
+        let end = split_points[i + 1];
+        let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
+        let handle =
+            thread::spawn(move || search_dump_0(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone[..]));
+        thread_handles.push(handle);
+    }
+    for handle in thread_handles {
+        handle.join().unwrap();
+    }
+}
+
+pub fn search_dump_0(re: Regex, dump_file: &str, start: u64, end: u64, namespaces: &[String]) {
+    let file = File::open(&dump_file).unwrap();
+    let slice = IoSlice::new(file, start, end - start).unwrap();
+    let buf_size = 2 * 1024 * 1024;
+    let buf_reader = BufReader::with_capacity(buf_size, slice);
     let mut reader = Reader::from_reader(buf_reader);
+    reader.check_end_names(false);
 
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     let mut title: String = String::with_capacity(10000);
@@ -66,7 +126,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
                 }
                 b"ns" => {
                     let skip = read_text_and_then(&mut reader, &mut buf, |text| {
-                        !namespaces.is_empty() && !namespaces.iter().any(|&i| i == text)
+                        !namespaces.is_empty() && !namespaces.iter().any(|i| i == text)
                     });
                     if skip {
                         reader.read_to_end(b"page", &mut buf).unwrap();
