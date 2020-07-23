@@ -6,7 +6,6 @@
 - parallelity configurable
 - pass config object to search_dump()
 - collect results in a thread-safe way
-- split by part size (configurable?)
 - only print title option
 - use Result instead of panicking
 
