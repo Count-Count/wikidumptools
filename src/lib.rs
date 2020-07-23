@@ -7,12 +7,12 @@
 use memchr::{memchr, memrchr};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use rayon::prelude::*;
 use regex::{Regex, RegexBuilder};
 use slice::IoSlice;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::str::from_utf8;
-use std::thread;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
@@ -77,25 +77,19 @@ fn set_plain(stream: &mut StandardStream) {
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let parts: usize = 12;
-    let split_points = get_split_points(&dump_file, parts as u64);
-    let mut thread_handles = Vec::with_capacity(parts as usize);
-    for start_and_end in split_points.windows(2) {
+    let parts: usize = 120;
+    let split_points = get_split_points(&dump_file, parts as u32);
+
+    split_points.par_windows(2).for_each(|start_and_end| {
         if let &[start, end] = start_and_end {
             let re_clone = re.clone();
             let dump_file_clone = dump_file.to_owned();
             let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
-            let handle = thread::spawn(move || {
-                search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone)
-            });
-            thread_handles.push(handle);
+            search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone);
         } else {
             unreachable!();
         }
-    }
-    for handle in thread_handles {
-        handle.join().unwrap();
-    }
+    });
 }
 
 pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namespaces: &[String]) {
