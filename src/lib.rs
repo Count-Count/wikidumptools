@@ -18,23 +18,27 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
-pub fn get_split_points(dump_file: &str, parts: u64) -> Vec<u64> {
+pub fn get_split_points(dump_file: &str, parts: u32) -> Vec<u64> {
     let file = File::open(&dump_file).unwrap();
     let len = file.metadata().unwrap().len();
-    let slice_size = len / parts;
+    let slice_size = len / parts as u64;
     let mut res: Vec<u64> = Vec::with_capacity(parts as usize + 1);
     res.push(0);
-    for i in 1..parts {
-        let slice = IoSlice::new(&file, i * slice_size, slice_size).unwrap();
-        let buf_reader = BufReader::with_capacity(2 * 1024 * 1024, slice);
-        let mut reader = Reader::from_reader(buf_reader);
-        reader.check_end_names(false);
-        let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
-        skip_to_start_tag(&mut reader, &mut buf, b"page");
-        let buf_pos = reader.buffer_position();
-        let file_pos = buf_pos as u64 + i * slice_size - b"<page>".len() as u64;
-        res.push(file_pos)
-    }
+    (1..parts)
+        .into_par_iter()
+        .map(|i| {
+            let file = File::open(&dump_file).unwrap();
+            let slice = IoSlice::new(file, i as u64 * slice_size, slice_size).unwrap();
+            let buf_reader = BufReader::with_capacity(2 * 1024 * 1024, slice);
+            let mut reader = Reader::from_reader(buf_reader);
+            reader.check_end_names(false);
+            let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
+            skip_to_start_tag(&mut reader, &mut buf, b"page");
+            let buf_pos = reader.buffer_position();
+            let file_pos = buf_pos as u64 + i as u64 * slice_size - b"<page>".len() as u64;
+            file_pos
+        })
+        .collect_into_vec(&mut res);
     res.push(len);
     res
 }
