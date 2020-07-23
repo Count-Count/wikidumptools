@@ -8,7 +8,7 @@ use atty;
 use clap::{App, Arg};
 use std::fs;
 use std::time::Instant;
-use termcolor::{ColorChoice, StandardStream};
+use termcolor::ColorChoice;
 use wikidumpgrep::search_dump;
 
 fn main() {
