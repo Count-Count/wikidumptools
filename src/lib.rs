@@ -62,35 +62,34 @@ fn set_plain(buffer: &mut Buffer) {
 }
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
-    let re = RegexBuilder::new(regex).build().unwrap();
-    let len = metadata(dump_file).unwrap().len();
+    let re = Arc::from(RegexBuilder::new(regex).build().unwrap());
+    let dump_file = Arc::new(dump_file);
+    let namespaces = Arc::new(namespaces);
+    let len = metadata(&dump_file as &str).unwrap().len();
     let calc_parts = len / 1024 / 1024 / 500;
     let parts = if calc_parts > 0 { calc_parts } else { 1 };
     let slice_size = len / parts;
     let stdout_writer = Arc::new(BufferWriter::stdout(ColorChoice::Auto));
 
     (0..parts).into_par_iter().for_each(|i| {
-        let re_clone = re.clone();
-        let dump_file_clone = dump_file.to_owned();
-        let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
         search_dump_part(
             &stdout_writer,
-            re_clone,
-            dump_file_clone.as_str(),
+            &re,
+            &dump_file,
             i * slice_size,
             (i + 1) * slice_size,
-            &namespaces_clone,
+            &namespaces as &[&str],
         );
     });
 }
 
 pub fn search_dump_part(
     stdout_writer: &BufferWriter,
-    re: Regex,
+    re: &Regex,
     dump_file: &str,
     start: u64,
     end: u64,
-    namespaces: &[String],
+    namespaces: &[&str],
 ) {
     let mut file = File::open(&dump_file).unwrap();
     file.seek(SeekFrom::Start(start)).unwrap();
@@ -125,7 +124,7 @@ pub fn search_dump_part(
                     }
                     b"ns" => {
                         let skip = read_text_and_then(&mut reader, &mut buf, |text| {
-                            !namespaces.is_empty() && !namespaces.iter().any(|i| i == text)
+                            !namespaces.is_empty() && !namespaces.iter().any(|i| *i == text)
                         });
                         if skip {
                             reader.read_to_end(b"page", &mut buf).unwrap();

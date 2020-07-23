@@ -2,7 +2,6 @@
 
 ## Short-term
 - use atty to detect terminal
-- get rid of copying for parallel code
 - parallelity configurable
 - pass config object to search_dump()
 - only print title option
