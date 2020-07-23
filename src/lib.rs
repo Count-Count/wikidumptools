@@ -60,10 +60,10 @@ fn set_plain(stream: &mut StandardStream) {
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
-    let parts: usize = 120;
+    let parts = 120;
     let len = metadata(dump_file).unwrap().len();
-    let slice_size = len / parts as u64;
-    (0..parts as u64).into_par_iter().for_each(|i| {
+    let slice_size = len / parts;
+    (0..parts).into_par_iter().for_each(|i| {
         let re_clone = re.clone();
         let dump_file_clone = dump_file.to_owned();
         let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
