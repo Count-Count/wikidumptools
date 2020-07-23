@@ -16,3 +16,4 @@
 - handle bz2/xz compressed files
 - search all revisions
 - filter by title, user
+- search added text?
