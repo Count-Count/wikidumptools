@@ -17,6 +17,7 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
+#[inline(always)]
 fn read_text_and_then<T: BufRead, ResT, F>(reader: &mut Reader<T>, buf: &mut Vec<u8>, mut f: F) -> ResT
 where
     F: FnMut(&str) -> ResT,
@@ -35,6 +36,7 @@ enum SkipResult {
     EOF,
 }
 
+#[inline(always)]
 fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> SkipResult {
     loop {
         match reader.read_event(buf).unwrap() {
@@ -143,6 +145,7 @@ pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namesp
     }
 }
 
+#[inline(always)]
 fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex) {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
