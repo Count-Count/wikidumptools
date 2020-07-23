@@ -9,39 +9,13 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use rayon::prelude::*;
 use regex::{Regex, RegexBuilder};
-use slice::IoSlice;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::fs::{metadata, File};
+use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::str::from_utf8;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-
-pub fn get_split_points(dump_file: &str, parts: u32) -> Vec<u64> {
-    let file = File::open(&dump_file).unwrap();
-    let len = file.metadata().unwrap().len();
-    let slice_size = len / parts as u64;
-    let mut res: Vec<u64> = Vec::with_capacity(parts as usize + 1);
-    res.push(0);
-    (1..parts)
-        .into_par_iter()
-        .map(|i| {
-            let file = File::open(&dump_file).unwrap();
-            let slice = IoSlice::new(file, i as u64 * slice_size, slice_size).unwrap();
-            let buf_reader = BufReader::with_capacity(2 * 1024 * 1024, slice);
-            let mut reader = Reader::from_reader(buf_reader);
-            reader.check_end_names(false);
-            let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
-            skip_to_start_tag(&mut reader, &mut buf, b"page");
-            let buf_pos = reader.buffer_position();
-            let file_pos = buf_pos as u64 + i as u64 * slice_size - b"<page>".len() as u64;
-            file_pos
-        })
-        .collect_into_vec(&mut res);
-    res.push(len);
-    res
-}
 
 fn read_text_and_then<T: BufRead, ResT, F>(reader: &mut Reader<T>, buf: &mut Vec<u8>, mut f: F) -> ResT
 where
@@ -56,14 +30,19 @@ where
     }
 }
 
-fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) {
+enum SkipResult {
+    StartTagFound,
+    EOF,
+}
+
+fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> SkipResult {
     loop {
         match reader.read_event(buf).unwrap() {
             Event::Start(ref e) if e.name() == tag_name => {
-                return;
+                return SkipResult::StartTagFound;
             }
             Event::Eof => {
-                panic!("Unexpected EOF");
+                return SkipResult::EOF;
             }
             _other_event => {}
         }
@@ -82,25 +61,27 @@ fn set_plain(stream: &mut StandardStream) {
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let re = RegexBuilder::new(regex).build().unwrap();
     let parts: usize = 120;
-    let split_points = get_split_points(&dump_file, parts as u32);
-
-    split_points.par_windows(2).for_each(|start_and_end| {
-        if let &[start, end] = start_and_end {
-            let re_clone = re.clone();
-            let dump_file_clone = dump_file.to_owned();
-            let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
-            search_dump_part(re_clone, dump_file_clone.as_str(), start, end, &namespaces_clone);
-        } else {
-            unreachable!();
-        }
+    let len = metadata(dump_file).unwrap().len();
+    let slice_size = len / parts as u64;
+    (0..parts as u64).into_par_iter().for_each(|i| {
+        let re_clone = re.clone();
+        let dump_file_clone = dump_file.to_owned();
+        let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
+        search_dump_part(
+            re_clone,
+            dump_file_clone.as_str(),
+            i * slice_size,
+            (i + 1) * slice_size,
+            &namespaces_clone,
+        );
     });
 }
 
 pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namespaces: &[String]) {
-    let file = File::open(&dump_file).unwrap();
-    let slice = IoSlice::new(file, start, end - start).unwrap();
+    let mut file = File::open(&dump_file).unwrap();
+    file.seek(SeekFrom::Start(start)).unwrap();
     let buf_size = 2 * 1024 * 1024;
-    let buf_reader = BufReader::with_capacity(buf_size, slice);
+    let buf_reader = BufReader::with_capacity(buf_size, file);
     let mut reader = Reader::from_reader(buf_reader);
     reader.check_end_names(false);
 
@@ -112,43 +93,53 @@ pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namesp
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
     loop {
-        match reader.read_event(&mut buf).unwrap() {
-            Event::Start(ref e) => match e.name() {
-                b"title" => {
-                    read_text_and_then(&mut reader, &mut buf, |text| {
-                        title.clear();
-                        title.push_str(text);
-                    });
-                }
-                b"ns" => {
-                    let skip = read_text_and_then(&mut reader, &mut buf, |text| {
-                        !namespaces.is_empty() && !namespaces.iter().any(|i| i == text)
-                    });
-                    if skip {
-                        reader.read_to_end(b"page", &mut buf).unwrap();
-                    }
-                }
-                b"text" => {
-                    read_text_and_then(&mut reader, &mut buf, |text| {
-                        if only_print_title {
-                            if re.is_match(text) {
-                                set_color(&mut stdout, Color::Cyan);
-                                writeln!(&mut stdout, "{}", title.as_str()).unwrap();
-                                set_plain(&mut stdout);
-                            }
-                        } else {
-                            find_in_page(&mut stdout, title.as_str(), text, &re);
-                        }
-                    });
-                }
-                _other_tag => { /* ignore */ }
-            },
-            Event::Eof => {
-                break;
-            }
-            _other_event => (),
+        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"page") {
+            break;
         }
-        buf.clear();
+        let page_tag_start_pos = reader.buffer_position() as u64 + start - b"<page>".len() as u64;
+        if page_tag_start_pos >= end {
+            break;
+        }
+        loop {
+            match reader.read_event(&mut buf).unwrap() {
+                Event::Start(ref e) => match e.name() {
+                    b"title" => {
+                        read_text_and_then(&mut reader, &mut buf, |text| {
+                            title.clear();
+                            title.push_str(text);
+                        });
+                    }
+                    b"ns" => {
+                        let skip = read_text_and_then(&mut reader, &mut buf, |text| {
+                            !namespaces.is_empty() && !namespaces.iter().any(|i| i == text)
+                        });
+                        if skip {
+                            reader.read_to_end(b"page", &mut buf).unwrap();
+                        }
+                    }
+                    b"text" => {
+                        read_text_and_then(&mut reader, &mut buf, |text| {
+                            if only_print_title {
+                                if re.is_match(text) {
+                                    set_color(&mut stdout, Color::Cyan);
+                                    writeln!(&mut stdout, "{}", title.as_str()).unwrap();
+                                    set_plain(&mut stdout);
+                                }
+                            } else {
+                                find_in_page(&mut stdout, title.as_str(), text, &re);
+                            }
+                        });
+                        break;
+                    }
+                    _other_tag => { /* ignore */ }
+                },
+                Event::Eof => {
+                    panic!("Unexpected EOF during file reading");
+                }
+                _other_event => (),
+            }
+            buf.clear();
+        }
     }
 }
 
