@@ -61,7 +61,7 @@ fn set_plain(buffer: &mut Buffer) {
     buffer.set_color(ColorSpec::new().set_fg(None)).unwrap();
 }
 
-pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
+pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) {
     let re = Arc::from(RegexBuilder::new(regex).build().unwrap());
     let dump_file = Arc::new(dump_file);
     let namespaces = Arc::new(namespaces);
@@ -69,7 +69,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let calc_parts = len / 1024 / 1024 / 500;
     let parts = if calc_parts > 0 { calc_parts } else { 1 };
     let slice_size = len / parts;
-    let stdout_writer = Arc::new(BufferWriter::stdout(ColorChoice::Auto));
+    let stdout_writer = Arc::new(BufferWriter::stdout(color_choice));
 
     (0..parts).into_par_iter().for_each(|i| {
         search_dump_part(

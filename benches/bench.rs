@@ -13,6 +13,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
+use termcolor::ColorChoice;
 use wikidumpgrep::search_dump;
 
 pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
@@ -167,5 +168,10 @@ fn test_dump_reading_direct(buf_size: usize) {
 }
 
 fn test_dump_searching() {
-    search_dump("xyabcdefghijk", get_dump_path().to_str().unwrap(), &vec!["0"]);
+    search_dump(
+        "xyabcdefghijk",
+        get_dump_path().to_str().unwrap(),
+        &vec!["0"],
+        ColorChoice::Never,
+    );
 }

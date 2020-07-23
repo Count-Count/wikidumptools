@@ -6,6 +6,7 @@
 - pass config object to search_dump()
 - only print title option
 - use Result instead of panicking
+- color commandline option
 
 ## Long-term
 - dl tool

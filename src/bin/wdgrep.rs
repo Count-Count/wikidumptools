@@ -4,9 +4,11 @@
 //
 // Distributed under the terms of the MIT license.
 
+use atty;
 use clap::{App, Arg};
 use std::fs;
 use std::time::Instant;
+use termcolor::{ColorChoice, StandardStream};
 use wikidumpgrep::search_dump;
 
 fn main() {
@@ -42,11 +44,18 @@ fn main() {
 
     let dump_len = fs::metadata(matches.value_of("dump file").unwrap()).unwrap().len();
 
+    let color_choice = if atty::is(atty::Stream::Stdout) {
+        ColorChoice::Auto
+    } else {
+        ColorChoice::Never
+    };
+
     let now = Instant::now();
     search_dump(
         matches.value_of("search term").unwrap(),
         matches.value_of("dump file").unwrap(),
         &namespaces,
+        color_choice,
     );
     let elapsed_seconds = now.elapsed().as_secs_f32();
     let mib_read = dump_len as f32 / 1024.0 / 1024.0;
