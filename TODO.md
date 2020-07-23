@@ -5,7 +5,6 @@
 - get rid of copying for parallel code
 - parallelity configurable
 - pass config object to search_dump()
-- collect results in a thread-safe way
 - only print title option
 - use Result instead of panicking
 

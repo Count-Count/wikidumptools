@@ -12,7 +12,8 @@ use regex::{Regex, RegexBuilder};
 use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::str::from_utf8;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use std::sync::Arc;
+use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
@@ -52,12 +53,12 @@ fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_
     }
 }
 
-fn set_color(stream: &mut StandardStream, c: Color) {
-    stream.set_color(ColorSpec::new().set_fg(Some(c))).unwrap();
+fn set_color(buffer: &mut Buffer, c: Color) {
+    buffer.set_color(ColorSpec::new().set_fg(Some(c))).unwrap();
 }
 
-fn set_plain(stream: &mut StandardStream) {
-    stream.set_color(ColorSpec::new().set_fg(None)).unwrap();
+fn set_plain(buffer: &mut Buffer) {
+    buffer.set_color(ColorSpec::new().set_fg(None)).unwrap();
 }
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
@@ -66,11 +67,14 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     let calc_parts = len / 1024 / 1024 / 500;
     let parts = if calc_parts > 0 { calc_parts } else { 1 };
     let slice_size = len / parts;
+    let stdout_writer = Arc::new(BufferWriter::stdout(ColorChoice::Auto));
+
     (0..parts).into_par_iter().for_each(|i| {
         let re_clone = re.clone();
         let dump_file_clone = dump_file.to_owned();
         let namespaces_clone: Vec<String> = namespaces.iter().cloned().map(String::from).collect();
         search_dump_part(
+            &stdout_writer,
             re_clone,
             dump_file_clone.as_str(),
             i * slice_size,
@@ -80,7 +84,14 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str]) {
     });
 }
 
-pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namespaces: &[String]) {
+pub fn search_dump_part(
+    stdout_writer: &BufferWriter,
+    re: Regex,
+    dump_file: &str,
+    start: u64,
+    end: u64,
+    namespaces: &[String],
+) {
     let mut file = File::open(&dump_file).unwrap();
     file.seek(SeekFrom::Start(start)).unwrap();
     let buf_size = 2 * 1024 * 1024;
@@ -93,7 +104,7 @@ pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namesp
 
     let only_print_title = false; // TODO: param
 
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let mut stdout_buffer = stdout_writer.buffer();
 
     loop {
         if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"page") {
@@ -124,12 +135,16 @@ pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namesp
                         read_text_and_then(&mut reader, &mut buf, |text| {
                             if only_print_title {
                                 if re.is_match(text) {
-                                    set_color(&mut stdout, Color::Cyan);
-                                    writeln!(&mut stdout, "{}", title.as_str()).unwrap();
-                                    set_plain(&mut stdout);
+                                    set_color(&mut stdout_buffer, Color::Cyan);
+                                    writeln!(&mut stdout_buffer, "{}", title.as_str()).unwrap();
+                                    set_plain(&mut stdout_buffer);
+                                    stdout_writer.print(&stdout_buffer).unwrap();
+                                    stdout_buffer.clear();
                                 }
                             } else {
-                                find_in_page(&mut stdout, title.as_str(), text, &re);
+                                find_in_page(&mut stdout_buffer, title.as_str(), text, &re);
+                                stdout_writer.print(&stdout_buffer).unwrap();
+                                stdout_buffer.clear();
                             }
                         });
                         break;
@@ -147,15 +162,15 @@ pub fn search_dump_part(re: Regex, dump_file: &str, start: u64, end: u64, namesp
 }
 
 #[inline(always)]
-fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex) {
+fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
         if first_match {
             // print title once
-            set_color(stdout, Color::Cyan);
-            writeln!(stdout, "{}", title).unwrap();
-            set_plain(stdout);
+            set_color(buffer, Color::Cyan);
+            writeln!(buffer, "{}", title).unwrap();
+            set_plain(buffer);
         }
 
         match memrchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
@@ -163,7 +178,7 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
                 // match starting on same line that the last match ended
 
                 // print text between matches
-                write!(stdout, "{}", &text[last_match_end..m.start()]).unwrap();
+                write!(buffer, "{}", &text[last_match_end..m.start()]).unwrap();
             }
             Some(pos) => {
                 // match starting on a new line
@@ -175,12 +190,12 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
                             panic!("Memchr/Memrchr inconsistency");
                         }
                         Some(pos) => {
-                            writeln!(stdout, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                            writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
                         }
                     }
                 }
                 // print text in line preceding match
-                write!(stdout, "{}", &text[last_match_end + pos + 1..m.start()]).unwrap();
+                write!(buffer, "{}", &text[last_match_end + pos + 1..m.start()]).unwrap();
             }
         };
         // print matched text
@@ -191,9 +206,9 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
         } else {
             m.end()
         };
-        set_color(stdout, Color::Red);
-        write!(stdout, "{}", &text[m.start()..actual_match_end]).unwrap();
-        set_plain(stdout);
+        set_color(buffer, Color::Red);
+        write!(buffer, "{}", &text[m.start()..actual_match_end]).unwrap();
+        set_plain(buffer);
         last_match_end = actual_match_end;
         if first_match {
             first_match = false;
@@ -204,14 +219,14 @@ fn find_in_page(stdout: &mut StandardStream, title: &str, text: &str, re: &Regex
         // print rest of last matching line
         match memchr(b'\n', &text.as_bytes()[last_match_end..]) {
             None => {
-                writeln!(stdout, "{}", &text[last_match_end..]).unwrap();
+                writeln!(buffer, "{}", &text[last_match_end..]).unwrap();
             }
             Some(pos) => {
-                writeln!(stdout, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
             }
         }
         // separate from next match
-        writeln!(stdout).unwrap();
+        writeln!(buffer).unwrap();
     }
 }
 #[cfg(test)]
@@ -220,36 +235,38 @@ mod tests {
 
     #[test]
     fn test_print() {
-        let mut stdout = StandardStream::stdout(ColorChoice::Always);
+        let stdout_writer = BufferWriter::stdout(ColorChoice::Auto);
+        let mut stdout_buffer = stdout_writer.buffer();
         find_in_page(
-            &mut stdout,
+            &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("Abc").build().unwrap(),
         );
         find_in_page(
-            &mut stdout,
+            &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("^").build().unwrap(),
         );
         find_in_page(
-            &mut stdout,
+            &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("Xyz\n").build().unwrap(),
         );
         find_in_page(
-            &mut stdout,
+            &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("\n").build().unwrap(),
         );
         find_in_page(
-            &mut stdout,
+            &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("123").build().unwrap(),
         );
+        stdout_writer.print(&stdout_buffer).unwrap();
     }
 }
