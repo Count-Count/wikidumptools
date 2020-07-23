@@ -1,7 +1,6 @@
 # TODO
 
 ## Short-term
-- use atty to detect terminal
 - parallelity configurable
 - pass config object to search_dump()
 - only print title option
