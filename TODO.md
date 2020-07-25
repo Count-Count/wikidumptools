@@ -14,7 +14,7 @@
 - search all revisions
 - filter by title, user
 - search added text?
-- allow passing namespaces by name?
+- parse siteinfo and allow passing namespaces by name?
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
