@@ -173,5 +173,6 @@ fn test_dump_searching() {
         get_dump_path().to_str().unwrap(),
         &vec!["0"],
         ColorChoice::Never,
-    );
+    )
+    .unwrap();
 }

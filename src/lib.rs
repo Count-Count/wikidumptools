@@ -18,17 +18,89 @@ use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor}
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    Utf8(std::str::Utf8Error),
+    Xml(quick_xml::Error),
+    Regex(regex::Error),
+    OnlyTextExpectedInTag(String),
+}
+
+impl From<std::io::Error> for Error {
+    #[inline]
+    fn from(error: std::io::Error) -> Error {
+        Error::Io(error)
+    }
+}
+
+impl From<std::str::Utf8Error> for Error {
+    #[inline]
+    fn from(error: std::str::Utf8Error) -> Error {
+        Error::Utf8(error)
+    }
+}
+
+impl From<quick_xml::Error> for Error {
+    #[inline]
+    fn from(error: quick_xml::Error) -> Error {
+        match error {
+            quick_xml::Error::Utf8(e) => Error::Utf8(e),
+            quick_xml::Error::Io(e) => Error::Io(e),
+            error => Error::Xml(error),
+        }
+    }
+}
+
+impl From<regex::Error> for Error {
+    #[inline]
+    fn from(error: regex::Error) -> Error {
+        Error::Regex(error)
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::Io(e) => write!(f, "I/O error: {}", e),
+            Error::Utf8(e) => write!(f, "UTF8 format error: {}", e),
+            Error::Xml(e) => write!(f, "XML format error: {}", e),
+            Error::Regex(e) => write!(f, "Regex error: {}", e),
+            Error::OnlyTextExpectedInTag(tag) => write!(f, "Only text expected in {}", tag),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Io(e) => Some(e),
+            Error::Utf8(e) => Some(e),
+            Error::Xml(e) => Some(e),
+            Error::Regex(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[inline(always)]
-fn read_text_and_then<T: BufRead, ResT, F>(reader: &mut Reader<T>, buf: &mut Vec<u8>, mut f: F) -> ResT
+fn read_text_and_then<T: BufRead, ResT, F>(
+    reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+    tag: &str,
+    mut f: F,
+) -> Result<ResT>
 where
-    F: FnMut(&str) -> ResT,
+    F: FnMut(&str) -> Result<ResT>,
 {
-    if let Event::Text(escaped_text) = reader.read_event(buf).unwrap() {
-        let unescaped_text = escaped_text.unescaped().unwrap();
-        let text = from_utf8(&unescaped_text).unwrap();
+    if let Event::Text(escaped_text) = reader.read_event(buf)? {
+        let unescaped_text = escaped_text.unescaped()?;
+        let text = from_utf8(&unescaped_text)?;
         f(text)
     } else {
-        panic!("Text expected");
+        Err(Error::OnlyTextExpectedInTag(tag.to_owned()))
     }
 }
 
@@ -38,14 +110,14 @@ enum SkipResult {
 }
 
 #[inline(always)]
-fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> SkipResult {
+fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<SkipResult> {
     loop {
-        match reader.read_event(buf).unwrap() {
+        match reader.read_event(buf)? {
             Event::Start(ref e) if e.name() == tag_name => {
-                return SkipResult::StartTagFound;
+                return Ok(SkipResult::StartTagFound);
             }
             Event::Eof => {
-                return SkipResult::EOF;
+                return Ok(SkipResult::EOF);
             }
             _other_event => {}
         }
@@ -53,25 +125,27 @@ fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_
     }
 }
 
+#[inline(always)]
 fn set_color(buffer: &mut Buffer, c: Color) {
     buffer.set_color(ColorSpec::new().set_fg(Some(c))).unwrap();
 }
 
+#[inline(always)]
 fn set_plain(buffer: &mut Buffer) {
     buffer.set_color(ColorSpec::new().set_fg(None)).unwrap();
 }
 
-pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) {
-    let re = Arc::from(RegexBuilder::new(regex).build().unwrap());
+pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) -> Result<()> {
+    let re = Arc::from(RegexBuilder::new(regex).build()?);
     let dump_file = Arc::new(dump_file);
     let namespaces = Arc::new(namespaces);
-    let len = metadata(&dump_file as &str).unwrap().len();
+    let len = metadata(&dump_file as &str)?.len();
     let calc_parts = len / 1024 / 1024 / 500;
     let parts = if calc_parts > 0 { calc_parts } else { 1 };
     let slice_size = len / parts;
     let stdout_writer = Arc::new(BufferWriter::stdout(color_choice));
 
-    (0..parts).into_par_iter().for_each(|i| {
+    (0..parts).into_par_iter().try_for_each(|i| {
         search_dump_part(
             &stdout_writer,
             &re,
@@ -79,8 +153,9 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choi
             i * slice_size,
             (i + 1) * slice_size,
             &namespaces as &[&str],
-        );
-    });
+        )
+    })?;
+    Ok(())
 }
 
 pub fn search_dump_part(
@@ -90,9 +165,9 @@ pub fn search_dump_part(
     start: u64,
     end: u64,
     namespaces: &[&str],
-) {
-    let mut file = File::open(&dump_file).unwrap();
-    file.seek(SeekFrom::Start(start)).unwrap();
+) -> Result<()> {
+    let mut file = File::open(&dump_file)?;
+    file.seek(SeekFrom::Start(start))?;
     let buf_size = 2 * 1024 * 1024;
     let buf_reader = BufReader::with_capacity(buf_size, file);
     let mut reader = Reader::from_reader(buf_reader);
@@ -106,7 +181,7 @@ pub fn search_dump_part(
     let mut stdout_buffer = stdout_writer.buffer();
 
     loop {
-        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"page") {
+        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"page")? {
             break;
         }
         let page_tag_start_pos = reader.buffer_position() as u64 + start - b"<page>".len() as u64;
@@ -114,24 +189,25 @@ pub fn search_dump_part(
             break;
         }
         loop {
-            match reader.read_event(&mut buf).unwrap() {
+            match reader.read_event(&mut buf)? {
                 Event::Start(ref e) => match e.name() {
                     b"title" => {
-                        read_text_and_then(&mut reader, &mut buf, |text| {
+                        read_text_and_then(&mut reader, &mut buf, "title", |text| {
                             title.clear();
                             title.push_str(text);
-                        });
+                            Ok(())
+                        })?;
                     }
                     b"ns" => {
-                        let skip = read_text_and_then(&mut reader, &mut buf, |text| {
-                            !namespaces.is_empty() && !namespaces.iter().any(|i| *i == text)
-                        });
+                        let skip = read_text_and_then(&mut reader, &mut buf, "ns", |text| {
+                            Ok(!namespaces.is_empty() && !namespaces.iter().any(|i| *i == text))
+                        })?;
                         if skip {
-                            reader.read_to_end(b"page", &mut buf).unwrap();
+                            reader.read_to_end(b"page", &mut buf)?;
                         }
                     }
                     b"text" => {
-                        read_text_and_then(&mut reader, &mut buf, |text| {
+                        read_text_and_then(&mut reader, &mut buf, "text", |text| {
                             if only_print_title {
                                 if re.is_match(text) {
                                     set_color(&mut stdout_buffer, Color::Cyan);
@@ -141,27 +217,27 @@ pub fn search_dump_part(
                                     stdout_buffer.clear();
                                 }
                             } else {
-                                find_in_page(&mut stdout_buffer, title.as_str(), text, &re);
+                                find_in_page(&mut stdout_buffer, title.as_str(), text, &re)?;
                                 stdout_writer.print(&stdout_buffer).unwrap();
                                 stdout_buffer.clear();
                             }
-                        });
+                            Ok(())
+                        })?;
                         break;
                     }
                     _other_tag => { /* ignore */ }
                 },
-                Event::Eof => {
-                    panic!("Unexpected EOF during file reading");
-                }
+                Event::Eof => return Err(Error::Xml(quick_xml::Error::UnexpectedEof("page".to_owned()))),
                 _other_event => (),
             }
             buf.clear();
         }
     }
+    Ok(())
 }
 
 #[inline(always)]
-fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) {
+fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) -> Result<()> {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
@@ -227,6 +303,7 @@ fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) {
         // separate from next match
         writeln!(buffer).unwrap();
     }
+    Ok(())
 }
 #[cfg(test)]
 mod tests {
@@ -241,31 +318,36 @@ mod tests {
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("Abc").build().unwrap(),
-        );
+        )
+        .unwrap();
         find_in_page(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("^").build().unwrap(),
-        );
+        )
+        .unwrap();
         find_in_page(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("Xyz\n").build().unwrap(),
-        );
+        )
+        .unwrap();
         find_in_page(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("\n").build().unwrap(),
-        );
+        )
+        .unwrap();
         find_in_page(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("123").build().unwrap(),
-        );
+        )
+        .unwrap();
         stdout_writer.print(&stdout_buffer).unwrap();
     }
 }
