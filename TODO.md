@@ -6,6 +6,7 @@
 - only print title option
 - use Result instead of panicking
 - color commandline option
+- check passed namespaces
 
 ## Long-term
 - dl tool
@@ -14,3 +15,8 @@
 - search all revisions
 - filter by title, user
 - search added text?
+- allow passing namespaces by name?
+
+## A man can dream...
+- Aarch64 Neon memchr implementation
+- non-copying XML parser
