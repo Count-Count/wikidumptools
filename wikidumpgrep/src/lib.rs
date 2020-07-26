@@ -134,12 +134,15 @@ fn set_plain(buffer: &mut Buffer) {
     buffer.set_color(ColorSpec::new().set_fg(None)).unwrap();
 }
 
+pub fn ceiling_div(x: u64, y: u64) -> u64 {
+    (x + y - 1) / y
+}
+
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) -> Result<()> {
     let re = RegexBuilder::new(regex).build()?;
     let len = metadata(&dump_file as &str)?.len();
-    let calc_parts = len / 1024 / 1024 / 500;
-    let parts = if calc_parts > 0 { calc_parts } else { 1 };
-    let slice_size = len / parts;
+    let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
+    let slice_size = ceiling_div(len, parts); // make sure to read to end
     let stdout_writer = BufferWriter::stdout(color_choice);
 
     (0..parts).into_par_iter().try_for_each(|i| {
