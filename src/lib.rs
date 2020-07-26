@@ -12,7 +12,6 @@ use regex::{Regex, RegexBuilder};
 use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::str::from_utf8;
-use std::sync::Arc;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[global_allocator]
@@ -136,20 +135,18 @@ fn set_plain(buffer: &mut Buffer) {
 }
 
 pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) -> Result<()> {
-    let re = Arc::from(RegexBuilder::new(regex).build()?);
-    let dump_file = Arc::new(dump_file);
-    let namespaces = Arc::new(namespaces);
+    let re = RegexBuilder::new(regex).build()?;
     let len = metadata(&dump_file as &str)?.len();
     let calc_parts = len / 1024 / 1024 / 500;
     let parts = if calc_parts > 0 { calc_parts } else { 1 };
     let slice_size = len / parts;
-    let stdout_writer = Arc::new(BufferWriter::stdout(color_choice));
+    let stdout_writer = BufferWriter::stdout(color_choice);
 
     (0..parts).into_par_iter().try_for_each(|i| {
         search_dump_part(
             &stdout_writer,
             &re,
-            &dump_file,
+            dump_file,
             i * slice_size,
             (i + 1) * slice_size,
             &namespaces as &[&str],
