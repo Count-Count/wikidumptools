@@ -34,6 +34,28 @@ pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
     group.finish();
 }
 
+pub fn criterion_benchmark_file_reading_bz2(c: &mut Criterion) {
+    let mut group = c.benchmark_group("file-io");
+    group
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(10))
+        .measurement_time(Duration::from_secs(140))
+        .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
+
+    static KB: usize = 1024;
+    static MB: usize = KB * 1024;
+    for buf_size in [1 * MB, 2 * MB, 4 * MB].iter() {
+        group.bench_with_input(
+            BenchmarkId::new("file-reading-bz2", buf_size),
+            &buf_size,
+            |b, &buf_size| {
+                b.iter(|| test_dump_reading_bz2(*buf_size));
+            },
+        );
+    }
+    group.finish();
+}
+
 pub fn criterion_benchmark_file_reading_in_parallel(c: &mut Criterion) {
     let mut group = c.benchmark_group("file-io");
     group
@@ -119,10 +141,11 @@ fn test_dump_reading_in_parallel(buf_size: usize, thread_count: u32) {
 
 criterion_group!(
     benches,
-    // criterion_benchmark_file_reading_direct,
     // criterion_benchmark_file_reading,
+    criterion_benchmark_file_reading_bz2,
+    // criterion_benchmark_file_reading_direct,
     // criterion_benchmark_file_reading_in_parallel,
-    criterion_benchmark_simple_search
+    // criterion_benchmark_simple_search
 );
 criterion_main!(benches);
 
@@ -130,6 +153,14 @@ fn get_dump_path() -> PathBuf {
     let env_var =
         env::var("WIKIPEDIA_DUMPS_DIRECTORY").expect("WIKIPEDIA_DUMPS_DIRECTORY environment variable not set.");
     let dump_path = Path::new(env_var.as_str()).join(Path::new("dewiki-20200620-pages-articles-multistream.xml"));
+    fs::metadata(&dump_path).expect("Dump file not found or inaccessible.");
+    dump_path
+}
+
+fn get_dump_path_bz2() -> PathBuf {
+    let env_var =
+        env::var("WIKIPEDIA_DUMPS_DIRECTORY").expect("WIKIPEDIA_DUMPS_DIRECTORY environment variable not set.");
+    let dump_path = Path::new(env_var.as_str()).join(Path::new("dewiki-20200701-pages-articles-multistream.xml.bz2"));
     fs::metadata(&dump_path).expect("Dump file not found or inaccessible.");
     dump_path
 }
@@ -146,6 +177,29 @@ fn test_dump_reading(buf_size: usize) {
         }
         reader.consume(length);
     }
+}
+
+fn test_dump_reading_bz2(buf_size: usize) {
+    let dump_path = get_dump_path_bz2();
+    let file = File::open(&dump_path).unwrap();
+    let mut bz2reader = bzip2::read::MultiBzDecoder::new(file);
+    let mut bytes_read = 0;
+    let mut buf: Vec<u8> = vec![0; buf_size];
+    loop {
+        match bz2reader.read(&mut buf) {
+            Ok(0) => {
+                break;
+            }
+            Ok(n) => {
+                // ok
+                bytes_read += n;
+            }
+            Err(_error) => {
+                panic!("Error reading file");
+            }
+        }
+    }
+    println!("Decompressed bytes read: {}", bytes_read);
 }
 
 fn test_dump_reading_direct(buf_size: usize) {
