@@ -87,9 +87,9 @@ struct DumpJobInfo {
 
 #[derive(Deserialize)]
 struct DumpFileInfo {
-    url: String,
+    url: Option<String>,
     sha1: Option<String>,
-    size: u64,
+    size: Option<u64>,
     md5: Option<String>,
 }
 
