@@ -43,18 +43,16 @@ async fn get_available_wikis_from_wikidata() -> Result<Vec<String>> {
         .error_for_status()?;
     let body = r.text().await?;
     let json: serde_json::Value = serde_json::from_str(body.as_str())?;
-    if let serde_json::Value::Array(vec) = &json["results"]["bindings"] {
-        for entry in vec {
-            if let serde_json::Value::String(s) = &entry["id"]["value"] {
-                if !blacklist.contains(&s.as_str()) {
-                    wikis.push(s.to_owned());
-                }
-            } else {
-                return Err(WDGetError::InvalidJsonFromWikidata());
-            }
+    let bindings = json["results"]["bindings"]
+        .as_array()
+        .ok_or(WDGetError::InvalidJsonFromWikidata())?;
+    for binding in bindings {
+        let value = binding["id"]["value"]
+            .as_str()
+            .ok_or(WDGetError::InvalidJsonFromWikidata())?;
+        if !blacklist.contains(&value) {
+            wikis.push(value.to_owned());
         }
-    } else {
-        return Err(WDGetError::InvalidJsonFromWikidata());
     }
     Ok(wikis)
 }
@@ -81,12 +79,17 @@ async fn list_types(wiki: &str, date: &str) -> Result<()> {
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
     let body = r.text().await?;
     let json: serde_json::Value = serde_json::from_str(body.as_str())?;
-    if let serde_json::Value::Object(map) = &json["jobs"] {
-        for key in map.keys() {
-            println!("{}", key)
-        }
-    } else {
-        return Err(WDGetError::InvalidJsonFromDumpStatus());
+    let jobs = json["jobs"]
+        .as_object()
+        .ok_or(WDGetError::InvalidJsonFromDumpStatus())?;
+    for key in jobs.keys() {
+        let job = jobs[key]
+            .as_object()
+            .ok_or(WDGetError::InvalidJsonFromDumpStatus())?;
+        let status = job["status"]
+            .as_str()
+            .ok_or(WDGetError::InvalidJsonFromDumpStatus())?;
+        println!("{} - status: {}", key, status);
     }
     Ok(())
 }
