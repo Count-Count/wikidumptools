@@ -147,7 +147,7 @@ async fn run() -> Result<()> {
         .subcommand(App::new("list-mirrors").about("List avaliable mirrors"))
         .get_matches();
 
-    let color_choice = if atty::is(atty::Stream::Stdout) {
+    let _color_choice = if atty::is(atty::Stream::Stdout) {
         ColorChoice::Auto
     } else {
         ColorChoice::Never
