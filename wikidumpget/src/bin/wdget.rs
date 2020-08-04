@@ -7,6 +7,8 @@
 use atty;
 use clap::{App, AppSettings, Arg};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use termcolor::ColorChoice;
 use thiserror::Error;
 
@@ -70,7 +72,28 @@ fn create_client() -> Result<Client> {
     Ok(reqwest::Client::builder().user_agent("wdget/0.1").build()?)
 }
 
-async fn list_types(wiki: &str, date: &str) -> Result<()> {
+#[derive(Deserialize)]
+struct DumpStatus {
+    version: String,
+    jobs: BTreeMap<String, DumpJobInfo>,
+}
+
+#[derive(Deserialize)]
+struct DumpJobInfo {
+    updated: String,
+    status: String,
+    files: Option<BTreeMap<String, DumpFileInfo>>,
+}
+
+#[derive(Deserialize)]
+struct DumpFileInfo {
+    url: String,
+    sha1: Option<String>,
+    size: u64,
+    md5: Option<String>,
+}
+
+async fn get_dump_status(wiki: &str, date: &str) -> Result<DumpStatus> {
     let client = create_client()?;
     let url = format!(
         "https://dumps.wikimedia.org/{}/{}/dumpstatus.json",
@@ -78,18 +101,13 @@ async fn list_types(wiki: &str, date: &str) -> Result<()> {
     );
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
     let body = r.text().await?;
-    let json: serde_json::Value = serde_json::from_str(body.as_str())?;
-    let jobs = json["jobs"]
-        .as_object()
-        .ok_or(WDGetError::InvalidJsonFromDumpStatus())?;
-    for key in jobs.keys() {
-        let job = jobs[key]
-            .as_object()
-            .ok_or(WDGetError::InvalidJsonFromDumpStatus())?;
-        let status = job["status"]
-            .as_str()
-            .ok_or(WDGetError::InvalidJsonFromDumpStatus())?;
-        println!("{} - status: {}", key, status);
+    Ok(serde_json::from_str(body.as_str())?)
+}
+
+async fn list_types(wiki: &str, date: &str) -> Result<()> {
+    let dump_status = get_dump_status(wiki, date).await?;
+    for (job_name, job_info) in &dump_status.jobs {
+        println!("{} - status: {}", &job_name, &job_info.status);
     }
     Ok(())
 }
