@@ -34,7 +34,7 @@ async fn get_available_wikis_from_wikidata() -> Result<Vec<String>> {
       }
       ";
     let blacklist = ["ecwikimedia", "labswiki", "labtestwiki", "ukwikiversity"];
-    let client = reqwest::Client::builder().user_agent("wdget/0.1").build()?;
+    let client = create_client()?;
     let r = client
         .get(sparql_url)
         .query(&[("format", "json"), ("query", query.trim())])
@@ -71,7 +71,7 @@ fn create_client() -> Result<Client> {
 }
 
 async fn list_types(wiki: &str, date: &str) -> Result<()> {
-    let client = reqwest::Client::builder().user_agent("wdget/0.1").build()?;
+    let client = create_client()?;
     let url = format!(
         "https://dumps.wikimedia.org/{}/{}/dumpstatus.json",
         wiki, date
