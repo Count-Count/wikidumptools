@@ -22,6 +22,12 @@ pub enum WDGetError {
     InvalidJsonFromWikidata(),
     #[error("Dump status JSON data is invalid")]
     InvalidJsonFromDumpStatus(),
+    #[error("Dump of this type was not found")]
+    DumpTypeNotFound(),
+    #[error("Dump is still in progress")]
+    DumpNotComplete(),
+    #[error("Dump does not contain any files")]
+    DumpHasNoFiles(),
 }
 
 type Result<T> = std::result::Result<T, WDGetError>;
@@ -118,6 +124,39 @@ async fn list_types(wiki: &str, date: &str) -> Result<()> {
     Ok(())
 }
 
+async fn download(wiki: &str, date: &str, dump_type: &str) -> Result<()> {
+    let dump_status = get_dump_status(wiki, date).await?;
+    let job_info = dump_status
+        .jobs
+        .get(dump_type)
+        .ok_or(WDGetError::DumpTypeNotFound())?;
+    if &job_info.status != "done" {
+        return Err(WDGetError::DumpNotComplete());
+    }
+    let files = job_info
+        .files
+        .as_ref()
+        .ok_or(WDGetError::DumpHasNoFiles())?;
+    let client = create_client()?;
+    for (file, _file_data) in files {
+        // TODO: sha1/md5/size checking
+        println!("Downloading {}...", file);
+        let url = format!("https://dumps.wikimedia.org/{}/{}/{}", wiki, date, file);
+        let mut r = client.get(url.as_str()).send().await?.error_for_status()?;
+        let mut bytes_read: u64 = 0;
+        loop {
+            if let Some(chunk) = r.chunk().await? {
+                bytes_read += chunk.len() as u64;
+            } else {
+                // done
+                break;
+            }
+        }
+        println!("Read {} MiB.", bytes_read as f32 / 1024.0 / 1024.0);
+    }
+    Ok(())
+}
+
 async fn run() -> Result<()> {
     let wiki_name_arg = Arg::with_name("wiki name")
         .help("Name of the wiki")
@@ -184,6 +223,16 @@ async fn run() -> Result<()> {
             list_types(
                 subcommand_matches.value_of("wiki name").unwrap(),
                 subcommand_matches.value_of("dump date").unwrap(),
+            )
+            .await?
+        }
+        "download" => {
+            // todo: check args
+            let subcommand_matches = matches.subcommand_matches("download").unwrap();
+            download(
+                subcommand_matches.value_of("wiki name").unwrap(),
+                subcommand_matches.value_of("dump date").unwrap(),
+                subcommand_matches.value_of("dump type").unwrap(),
             )
             .await?
         }
