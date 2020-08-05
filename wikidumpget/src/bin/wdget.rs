@@ -18,9 +18,9 @@ pub enum WDGetError {
     HttpError(#[from] reqwest::Error),
     #[error("Error parsing JSON: {0}")]
     JsonError(#[from] serde_json::Error),
-    #[error("Received invalid JSON data from Wikidata.")]
+    #[error("Received invalid JSON data from Wikidata")]
     InvalidJsonFromWikidata(),
-    #[error("Dump status JSON data is invalid.")]
+    #[error("Dump status JSON data is invalid")]
     InvalidJsonFromDumpStatus(),
 }
 
