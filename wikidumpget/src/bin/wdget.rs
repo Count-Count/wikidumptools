@@ -217,7 +217,7 @@ async fn run() -> Result<()> {
     };
     match matches.subcommand_name().unwrap() {
         "list-wikis" => list_wikis().await?,
-        "list-dates" => unimplemented!(),
+        "list-dates" => todo!(),
         "list-types" => {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("list-types").unwrap();
@@ -237,7 +237,7 @@ async fn run() -> Result<()> {
             )
             .await?
         }
-        _ => panic!("Unknown subcommand, should be caught by arg matching."),
+        _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }
     Ok(())
 }
