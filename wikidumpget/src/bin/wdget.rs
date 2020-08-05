@@ -74,12 +74,14 @@ fn create_client() -> Result<Client> {
 
 #[derive(Deserialize)]
 struct DumpStatus {
+    #[allow(dead_code)]
     version: String,
     jobs: BTreeMap<String, DumpJobInfo>,
 }
 
 #[derive(Deserialize)]
 struct DumpJobInfo {
+    #[allow(dead_code)]
     updated: String,
     status: String,
     files: Option<BTreeMap<String, DumpFileInfo>>,
@@ -87,9 +89,13 @@ struct DumpJobInfo {
 
 #[derive(Deserialize)]
 struct DumpFileInfo {
+    #[allow(dead_code)]
     url: Option<String>,
+    #[allow(dead_code)]
     sha1: Option<String>,
+    #[allow(dead_code)]
     size: Option<u64>,
+    #[allow(dead_code)]
     md5: Option<String>,
 }
 
