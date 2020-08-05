@@ -217,6 +217,7 @@ async fn run() -> Result<()> {
     };
     match matches.subcommand_name().unwrap() {
         "list-wikis" => list_wikis().await?,
+        "list-dates" => unimplemented!(),
         "list-types" => {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("list-types").unwrap();
