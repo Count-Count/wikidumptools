@@ -7,7 +7,7 @@
 use atty;
 use clap::{App, AppSettings, Arg};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use termcolor::ColorChoice;
 use thiserror::Error;
