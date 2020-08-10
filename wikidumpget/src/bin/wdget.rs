@@ -75,7 +75,9 @@ async fn list_wikis() -> Result<()> {
 }
 
 fn create_client() -> Result<Client> {
-    Ok(reqwest::Client::builder().user_agent("wdget/0.1").build()?)
+    Ok(reqwest::Client::builder()
+        .user_agent("wdget/0.1 (https://github.com/Count-Count/wikidumptools)")
+        .build()?)
 }
 
 #[derive(Deserialize)]
