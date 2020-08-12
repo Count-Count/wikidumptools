@@ -82,7 +82,7 @@ impl std::error::Error for Error {
     }
 }
 
-pub type WDGetResult<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[inline(always)]
 fn read_text_and_then<T: BufRead, ResT, F>(
@@ -90,9 +90,9 @@ fn read_text_and_then<T: BufRead, ResT, F>(
     buf: &mut Vec<u8>,
     tag: &str,
     mut f: F,
-) -> WDGetResult<ResT>
+) -> Result<ResT>
 where
-    F: FnMut(&str) -> WDGetResult<ResT>,
+    F: FnMut(&str) -> Result<ResT>,
 {
     if let Event::Text(escaped_text) = reader.read_event(buf)? {
         let unescaped_text = escaped_text.unescaped()?;
@@ -109,11 +109,7 @@ enum SkipResult {
 }
 
 #[inline(always)]
-fn skip_to_start_tag<T: BufRead>(
-    reader: &mut Reader<T>,
-    buf: &mut Vec<u8>,
-    tag_name: &[u8],
-) -> WDGetResult<SkipResult> {
+fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<SkipResult> {
     loop {
         match reader.read_event(buf)? {
             Event::Start(ref e) if e.name() == tag_name => {
@@ -142,7 +138,7 @@ pub fn ceiling_div(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
 
-pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) -> WDGetResult<()> {
+pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) -> Result<()> {
     let re = RegexBuilder::new(regex).build()?;
     let len = metadata(&dump_file as &str)?.len();
     let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
@@ -169,7 +165,7 @@ pub fn search_dump_part(
     start: u64,
     end: u64,
     namespaces: &[&str],
-) -> WDGetResult<()> {
+) -> Result<()> {
     let mut file = File::open(&dump_file)?;
     file.seek(SeekFrom::Start(start))?;
     let buf_size = 2 * 1024 * 1024;
@@ -241,7 +237,7 @@ pub fn search_dump_part(
 }
 
 #[inline(always)]
-fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) -> WDGetResult<()> {
+fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) -> Result<()> {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
