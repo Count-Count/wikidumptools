@@ -24,4 +24,8 @@
 - non-copying XML parser
 
 ## wdget
+- verify checksum while dl'ing
+- colorize
+- list available dumps
+- mirror support
 - option to unpack while dl?
