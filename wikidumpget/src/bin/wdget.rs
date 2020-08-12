@@ -9,7 +9,10 @@ use clap::{App, AppSettings, Arg};
 use reqwest::Client;
 use serde::Deserialize;
 use std::collections::BTreeMap;
+use std::fs;
+use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
 use std::time::Instant;
 use termcolor::ColorChoice;
 use thiserror::Error;
@@ -31,6 +34,8 @@ pub enum WDGetError {
     DumpNotComplete(),
     #[error("Dump does not contain any files")]
     DumpHasNoFiles(),
+    #[error("Error accessing dump part file {0} - {1}")]
+    DumpPartFileAccessError(String, String),
 }
 
 type Result<T> = std::result::Result<T, WDGetError>;
@@ -129,6 +134,12 @@ async fn list_types(wiki: &str, date: &str) -> Result<()> {
     Ok(())
 }
 
+fn create_partfile_name(filename: &str) -> String {
+    let mut res = String::from(filename);
+    res.push_str(".part");
+    res
+}
+
 async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Result<()> {
     let dump_status = get_dump_status(wiki, date).await?;
     let job_info = dump_status
@@ -143,13 +154,51 @@ async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Res
         .as_ref()
         .ok_or(WDGetError::DumpHasNoFiles())?;
     let client = create_client()?;
-    for (file, file_data) in files {
+    for (filename, file_data) in files {
         // TODO: sha1/md5/size checking
+        let partfile_name = create_partfile_name(filename);
+        if Path::new(&partfile_name).exists() {
+            let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
+                WDGetError::DumpPartFileAccessError(
+                    partfile_name.clone(),
+                    std::format!("Could not get file information: {0}", e),
+                )
+            })?;
+            if !partfile_metadata.is_file() {
+                return Err(WDGetError::DumpPartFileAccessError(
+                    partfile_name.clone(),
+                    "Expected regular file".to_owned(),
+                ));
+            }
+            let part_len = partfile_metadata.len();
+            if file_data.size.is_some() && part_len > file_data.size.unwrap() {
+                return Err(WDGetError::DumpPartFileAccessError(
+                    partfile_name.clone(),
+                    std::format!(
+                        "Existing part file is longer than expected: {0} > {1}",
+                        part_len,
+                        file_data.size.unwrap(),
+                    ),
+                ));
+            }
+            // partial download not yet implemented
+            todo!();
+        }
+        let mut partfile = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&partfile_name)
+            .map_err(|e| {
+                WDGetError::DumpPartFileAccessError(
+                    partfile_name.clone(),
+                    std::format!("Could not create part file: {0}", e),
+                )
+            })?;
         if verbose {
-            eprint!("Downloading {}...", file);
+            eprint!("Downloading {}...", filename);
             std::io::stderr().flush().unwrap();
         }
-        let url = format!("https://dumps.wikimedia.org/{}/{}/{}", wiki, date, file);
+        let url = format!("https://dumps.wikimedia.org/{}/{}/{}", wiki, date, filename);
         let mut r = client.get(url.as_str()).send().await?.error_for_status()?;
         let mut bytes_read: u64 = 0;
         let progress_update_period = time::Duration::from_secs(1);
@@ -165,11 +214,20 @@ async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Res
             tokio::select! {
                 chunk = r.chunk() => {
                     if let Some(chunk) = chunk? {
+                        partfile.write_all(chunk.as_ref()).map_err(|e| {
+                            WDGetError::DumpPartFileAccessError(
+                                partfile_name.clone(),
+                                std::format!("Write error: {0}", e),
+                            )
+                        })?;
                         bytes_read += chunk.len() as u64;
                     } else {
                         // done
-                        eprint!("\r{:1$}\r","",last_printed_progress_len);
-                        std::io::stderr().flush().unwrap();
+                        if verbose {
+                            // clear progress
+                            eprint!("\r{:1$}\r","",last_printed_progress_len);
+                            std::io::stderr().flush().unwrap();
+                        }
                         break;
                     }
                 },
@@ -180,7 +238,7 @@ async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Res
                             let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
                             let mut progress_string = std::format!(
                                 "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                                &file,
+                                &filename,
                                 bytes_read as f64 / 1024.0 / 1024.0,
                                 total_mib,
                                 mib_per_sec);
@@ -198,16 +256,23 @@ async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Res
                 }
             };
         }
+        std::fs::rename(&partfile_name, &filename).map_err(|e| {
+            WDGetError::DumpPartFileAccessError(
+                partfile_name.clone(),
+                std::format!("Could not rename part file: {0}", e),
+            )
+        })?;
+
         if verbose {
             eprintln!(
                 "Downloaded {} - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
-                &file,
+                &filename,
                 bytes_read as f64 / 1024.0 / 1024.0,
                 start_time.elapsed().as_secs_f64(),
                 bytes_read as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
             );
         } else {
-            println!("Downloaded {}.", &file);
+            println!("Downloaded {}.", &filename);
         }
     }
     Ok(())
