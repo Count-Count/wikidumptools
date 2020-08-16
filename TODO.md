@@ -17,7 +17,7 @@
 - parse siteinfo and allow passing namespaces by name?
 - print all matching articles
 - print match statistics (how many matches in how many articles, percentage of pages matching, ...)
-- search revisions as of a certain date
+- search revisions as of a certain date in allversions dump
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
@@ -27,5 +27,6 @@
 - verify checksum while dl'ing
 - colorize
 - list available dumps
-- mirror support
+- mirror list/shortcut
+- --target-dir
 - option to unpack while dl?
