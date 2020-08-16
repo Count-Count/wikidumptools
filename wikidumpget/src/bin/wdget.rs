@@ -140,7 +140,13 @@ fn create_partfile_name(filename: &str) -> String {
     res
 }
 
-async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Result<()> {
+async fn download(
+    wiki: &str,
+    date: &str,
+    dump_type: &str,
+    mirror: Option<&str>,
+    verbose: bool,
+) -> Result<()> {
     let dump_status = get_dump_status(wiki, date).await?;
     let job_info = dump_status
         .jobs
@@ -198,7 +204,8 @@ async fn download(wiki: &str, date: &str, dump_type: &str, verbose: bool) -> Res
             eprint!("Downloading {}...", filename);
             std::io::stderr().flush().unwrap();
         }
-        let url = format!("https://dumps.wikimedia.org/{}/{}/{}", wiki, date, filename);
+        let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
+        let url = format!("{}/{}/{}/{}", root_url, wiki, date, filename);
         let mut r = client.get(url.as_str()).send().await?.error_for_status()?;
         let mut bytes_read: u64 = 0;
         let progress_update_period = time::Duration::from_secs(1);
@@ -311,7 +318,7 @@ async fn run() -> Result<()> {
                 .arg(
                     Arg::with_name("mirror")
                         .long("mirror")
-                        .help("Mirror to use")
+                        .help("Root mirror URL")
                         .takes_value(true)
                         .max_values(1),
                 ),
@@ -355,6 +362,7 @@ async fn run() -> Result<()> {
                 subcommand_matches.value_of("wiki name").unwrap(),
                 subcommand_matches.value_of("dump date").unwrap(),
                 subcommand_matches.value_of("dump type").unwrap(),
+                subcommand_matches.value_of("mirror"),
                 matches.is_present("verbose"),
             )
             .await?
