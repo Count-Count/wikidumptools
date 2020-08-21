@@ -74,11 +74,11 @@ fn main() {
     let now = Instant::now();
     match search_dump(search_term, dump_file, &namespaces, color_choice) {
         Ok(()) => {
-            let elapsed_seconds = now.elapsed().as_secs_f32();
-            let mib_read = dump_len as f32 / 1024.0 / 1024.0;
+            let elapsed_seconds = now.elapsed().as_secs_f64();
+            let mib_read = dump_len as f64 / 1024.0 / 1024.0;
             if matches.is_present("verbose") {
                 eprintln!(
-                    "Searched {} MiB in {} seconds ({} MiB/s).",
+                    "Searched {:.2} MiB in {:.2} seconds ({:.2} MiB/s).",
                     mib_read,
                     elapsed_seconds,
                     mib_read / elapsed_seconds
