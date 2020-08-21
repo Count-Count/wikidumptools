@@ -20,7 +20,7 @@ fn main() {
         .arg(Arg::with_name("search term").help("regex search term").required(true))
         .arg(
             Arg::with_name("dump file")
-                .help("the uncompressed dump file to search")
+                .help("The uncompressed dump file to search")
                 .required(true),
         )
         .arg(
@@ -28,13 +28,13 @@ fn main() {
                 .long("ns")
                 .takes_value(true)
                 .use_delimiter(true)
-                .help("restrict search to those namespaces (comma-separated list of numeric namespaces)"),
+                .help("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(
             Arg::with_name("verbose")
                 .short("v")
                 .long("verbose")
-                .help("print performance statistics"),
+                .help("Print performance statistics"),
         )
         .get_matches();
 
