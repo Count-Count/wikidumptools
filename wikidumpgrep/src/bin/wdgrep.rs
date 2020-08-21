@@ -4,7 +4,6 @@
 //
 // Distributed under the terms of the MIT license.
 
-use atty;
 use clap::{App, Arg};
 use std::fs;
 use std::process;
@@ -46,7 +45,7 @@ fn main() {
 
     let search_term = matches.value_of("search term").unwrap();
     let dump_file = matches.value_of("dump file").unwrap();
-    if dump_file.len() == 0 {
+    if dump_file.is_empty() {
         eprintln!("{}", matches.usage());
         process::exit(1);
     }
@@ -55,7 +54,7 @@ fn main() {
         .values_of("namespaces")
         .unwrap_or_default()
         .map(str::trim)
-        .filter(|x| x.len() > 0)
+        .filter(|x| !x.is_empty())
         .collect();
 
     let dump_metadata = fs::metadata(dump_file).unwrap_or_else(|err| {
