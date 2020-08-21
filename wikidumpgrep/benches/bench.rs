@@ -226,6 +226,7 @@ fn test_dump_searching() {
         "xyabcdefghijk",
         get_dump_path().to_str().unwrap(),
         &vec!["0"],
+        false,
         ColorChoice::Never,
     )
     .unwrap();

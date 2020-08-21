@@ -138,7 +138,13 @@ pub fn ceiling_div(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
 
-pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choice: ColorChoice) -> Result<()> {
+pub fn search_dump(
+    regex: &str,
+    dump_file: &str,
+    namespaces: &[&str],
+    only_print_title: bool,
+    color_choice: ColorChoice,
+) -> Result<()> {
     let re = RegexBuilder::new(regex).build()?;
     let len = metadata(&dump_file as &str)?.len();
     let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
@@ -153,6 +159,7 @@ pub fn search_dump(regex: &str, dump_file: &str, namespaces: &[&str], color_choi
             i * slice_size,
             (i + 1) * slice_size,
             &namespaces as &[&str],
+            only_print_title,
         )
     })?;
     Ok(())
@@ -165,6 +172,7 @@ pub fn search_dump_part(
     start: u64,
     end: u64,
     namespaces: &[&str],
+    only_print_title: bool,
 ) -> Result<()> {
     let mut file = File::open(&dump_file)?;
     file.seek(SeekFrom::Start(start))?;
@@ -175,8 +183,6 @@ pub fn search_dump_part(
 
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     let mut title: String = String::with_capacity(10000);
-
-    let only_print_title = false; // TODO: param
 
     let mut stdout_buffer = stdout_writer.buffer();
 

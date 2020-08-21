@@ -36,6 +36,12 @@ fn main() {
                 .long("verbose")
                 .help("Print performance statistics"),
         )
+        .arg(
+            Arg::with_name("list-titles")
+                .short("l")
+                .long("list-titles")
+                .help("Only list title of articles containing matching text"),
+        )
         .get_matches();
 
     let search_term = matches.value_of("search term").unwrap();
@@ -71,8 +77,10 @@ fn main() {
         ColorChoice::Never
     };
 
+    let only_print_title = matches.is_present("list-titles");
+
     let now = Instant::now();
-    match search_dump(search_term, dump_file, &namespaces, color_choice) {
+    match search_dump(search_term, dump_file, &namespaces, only_print_title, color_choice) {
         Ok(()) => {
             let elapsed_seconds = now.elapsed().as_secs_f64();
             let mib_read = dump_len as f64 / 1024.0 / 1024.0;
