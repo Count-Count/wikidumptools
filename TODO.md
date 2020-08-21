@@ -3,9 +3,9 @@
 ## Short-term
 - parallelity configurable
 - pass config object to search_dump()
-- only print title option
 - color commandline option
 - check passed namespaces
+- search 7z files directly since extraction is not feasible (using 7z binary for now)
 
 ## Long-term
 - dl tool
