@@ -224,7 +224,7 @@ fn test_dump_reading_direct(buf_size: usize) {
 fn test_dump_searching() {
     search_dump(
         "xyabcdefghijk",
-        get_dump_path().to_str().unwrap(),
+        &vec![get_dump_path().to_str().unwrap().to_owned()],
         &vec!["0"],
         false,
         ColorChoice::Never,
