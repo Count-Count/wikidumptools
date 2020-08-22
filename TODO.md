@@ -3,7 +3,7 @@
 ## Short-term
 - parallelity configurable
 - pass config object to search_dump()
-- check passed namespaces
+- check passed namespaces and allow textual namespace specification
 - search 7z files directly since extraction is not feasible (using 7z binary for now)
 
 ## Long-term
@@ -25,7 +25,7 @@
 ## wdget
 - verify checksum while dl'ing
 - colorize
-- list available dumps
+- list available dumps dates
 - mirror list/shortcut
 - --target-dir
 - option to unpack while dl?
