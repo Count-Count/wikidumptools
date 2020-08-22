@@ -41,6 +41,13 @@ fn main() {
                 .long("list-titles")
                 .help("Only list title of articles containing matching text"),
         )
+        .arg(
+            Arg::with_name("color")
+                .long("color")
+                .takes_value(true)
+                .possible_values(&["always", "auto", "never"])
+                .help("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
+        )
         .get_matches();
 
     let search_term = matches.value_of("search term").unwrap();
@@ -70,12 +77,18 @@ fn main() {
     });
     let dump_len = dump_metadata.len();
 
-    let color_choice = if atty::is(atty::Stream::Stdout) {
-        ColorChoice::Auto
-    } else {
-        ColorChoice::Never
+    let color_choice = match matches.value_of("color").unwrap_or("auto") {
+        "auto" => {
+            if atty::is(atty::Stream::Stdout) {
+                ColorChoice::Auto
+            } else {
+                ColorChoice::Never
+            }
+        }
+        "always" => ColorChoice::Always,
+        "never" => ColorChoice::Never,
+        _ => unreachable!(),
     };
-
     let only_print_title = matches.is_present("list-titles");
 
     let now = Instant::now();
