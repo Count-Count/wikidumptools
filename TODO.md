@@ -29,3 +29,6 @@
 - mirror list/shortcut
 - --target-dir
 - option to unpack while dl?
+- --no-progress
+- delete part files by default
+- shorter progress text to avoid terminal overlow at normal widths
