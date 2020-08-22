@@ -31,6 +31,7 @@ pub enum Error {
     OnlyTextExpectedInTag(String),
 }
 
+// unnest some XML parsing errors
 impl From<quick_xml::Error> for Error {
     #[inline]
     fn from(error: quick_xml::Error) -> Error {
@@ -106,7 +107,7 @@ pub fn search_dump(
     color_choice: ColorChoice,
 ) -> Result<()> {
     let re = RegexBuilder::new(regex).build()?;
-    let len = metadata(&dump_file as &str)?.len();
+    let len = metadata(&dump_file)?.len();
     let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
     let slice_size = ceiling_div(len, parts); // make sure to read to end
     let stdout_writer = BufferWriter::stdout(color_choice);
@@ -118,7 +119,7 @@ pub fn search_dump(
             dump_file,
             i * slice_size,
             (i + 1) * slice_size,
-            &namespaces as &[&str],
+            &namespaces,
             only_print_title,
         )
     })?;
