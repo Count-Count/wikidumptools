@@ -17,27 +17,18 @@ use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor}
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
-    Io(std::io::Error),
-    Utf8(std::str::Utf8Error),
+    #[error("I/O error {0}")]
+    Io(#[from] std::io::Error),
+    #[error("UTF8 format error: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+    #[error("XML format error: {0}")]
     Xml(quick_xml::Error),
-    Regex(regex::Error),
+    #[error("Regex error: {0}")]
+    Regex(#[from] regex::Error),
+    #[error("Only text expected in {0}")]
     OnlyTextExpectedInTag(String),
-}
-
-impl From<std::io::Error> for Error {
-    #[inline]
-    fn from(error: std::io::Error) -> Error {
-        Error::Io(error)
-    }
-}
-
-impl From<std::str::Utf8Error> for Error {
-    #[inline]
-    fn from(error: std::str::Utf8Error) -> Error {
-        Error::Utf8(error)
-    }
 }
 
 impl From<quick_xml::Error> for Error {
@@ -47,37 +38,6 @@ impl From<quick_xml::Error> for Error {
             quick_xml::Error::Utf8(e) => Error::Utf8(e),
             quick_xml::Error::Io(e) => Error::Io(e),
             error => Error::Xml(error),
-        }
-    }
-}
-
-impl From<regex::Error> for Error {
-    #[inline]
-    fn from(error: regex::Error) -> Error {
-        Error::Regex(error)
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Error::Io(e) => write!(f, "I/O error: {}", e),
-            Error::Utf8(e) => write!(f, "UTF8 format error: {}", e),
-            Error::Xml(e) => write!(f, "XML format error: {}", e),
-            Error::Regex(e) => write!(f, "Regex error: {}", e),
-            Error::OnlyTextExpectedInTag(tag) => write!(f, "Only text expected in {}", tag),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::Io(e) => Some(e),
-            Error::Utf8(e) => Some(e),
-            Error::Xml(e) => Some(e),
-            Error::Regex(e) => Some(e),
-            _ => None,
         }
     }
 }
