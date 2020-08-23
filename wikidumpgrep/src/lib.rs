@@ -161,8 +161,8 @@ pub fn search_dump(
                 namespaces,
                 only_print_title,
             )?;
-            compressed_file_found.fetch_or(true, Ordering::SeqCst);
-            bytes_processed.fetch_add(bytes_processed_0, Ordering::SeqCst);
+            compressed_file_found.fetch_or(true, Ordering::Relaxed);
+            bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
             let res = handle.wait()?;
             if res.success() {
                 Ok(())
@@ -184,15 +184,15 @@ pub fn search_dump(
                     &namespaces,
                     only_print_title,
                 )?;
-                bytes_processed.fetch_add(bytes_processed_0, Ordering::SeqCst);
+                bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
                 Ok(())
             })
         }
     })?;
 
     Ok(SearchDumpResult {
-        bytes_processed: bytes_processed.load(Ordering::SeqCst),
-        compressed_files_found: compressed_file_found.load(Ordering::SeqCst),
+        bytes_processed: bytes_processed.load(Ordering::Relaxed),
+        compressed_files_found: compressed_file_found.load(Ordering::Relaxed),
     })
 }
 
