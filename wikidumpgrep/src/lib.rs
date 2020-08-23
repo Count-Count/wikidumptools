@@ -217,13 +217,14 @@ pub fn search_dump_reader<B: BufRead>(
     start: u64,
     end: u64,
     namespaces: &[&str],
-    only_print_title: bool,
+    only_print_title_and_revision: bool,
 ) -> Result<u64> {
     let mut reader = Reader::from_reader(buf_reader);
     reader.check_end_names(false);
 
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     let mut title: String = String::with_capacity(10000);
+    let mut revision_id: String = String::with_capacity(50);
 
     let mut stdout_buffer = stdout_writer.buffer();
 
@@ -250,30 +251,47 @@ pub fn search_dump_reader<B: BufRead>(
                             Ok(!namespaces.is_empty() && !namespaces.iter().any(|i| *i == text))
                         })?;
                         if skip {
-                            reader.read_to_end(b"page", &mut buf)?;
+                            break;
                         }
                     }
-                    b"text" => {
+                    b"revision" => {
+                        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"id")? {
+                            return Err(Error::Xml(quick_xml::Error::UnexpectedEof("id".to_owned())));
+                        }
+                        read_text_and_then(&mut reader, &mut buf, "id", |text| {
+                            revision_id.clear();
+                            revision_id.push_str(text);
+                            Ok(())
+                        })?;
+                        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"text")? {
+                            return Err(Error::Xml(quick_xml::Error::UnexpectedEof("text".to_owned())));
+                        }
                         read_text_and_then(&mut reader, &mut buf, "text", |text| {
-                            if only_print_title {
+                            if only_print_title_and_revision {
                                 if re.is_match(text) {
                                     set_color(&mut stdout_buffer, Color::Cyan);
-                                    writeln!(&mut stdout_buffer, "{}", title.as_str()).unwrap();
+                                    write!(&mut stdout_buffer, "{}", title.as_str()).unwrap();
+                                    set_plain(&mut stdout_buffer);
+                                    write!(&mut stdout_buffer, "@").unwrap();
+                                    set_color(&mut stdout_buffer, Color::Yellow);
+                                    writeln!(&mut stdout_buffer, "{}", revision_id.as_str()).unwrap();
                                     set_plain(&mut stdout_buffer);
                                     stdout_writer.print(&stdout_buffer).unwrap();
                                     stdout_buffer.clear();
                                 }
                             } else {
-                                find_in_text(&mut stdout_buffer, title.as_str(), text, &re)?;
+                                find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, &re)?;
                                 stdout_writer.print(&stdout_buffer).unwrap();
                                 stdout_buffer.clear();
                             }
                             Ok(())
                         })?;
-                        break;
                     }
                     _other_tag => { /* ignore */ }
                 },
+                Event::End(bytes_end) if bytes_end.name() == b"page" => {
+                    break;
+                }
                 Event::Eof => return Err(Error::Xml(quick_xml::Error::UnexpectedEof("page".to_owned()))),
                 _other_event => (),
             }
@@ -284,14 +302,18 @@ pub fn search_dump_reader<B: BufRead>(
 }
 
 #[inline(always)]
-fn find_in_text(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) -> Result<()> {
+fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str, re: &Regex) -> Result<()> {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
         if first_match {
             // print title once
             set_color(buffer, Color::Cyan);
-            writeln!(buffer, "{}", title).unwrap();
+            write!(buffer, "{}", title).unwrap();
+            set_plain(buffer);
+            write!(buffer, "@").unwrap();
+            set_color(buffer, Color::Yellow);
+            writeln!(buffer, "{}", revision_id).unwrap();
             set_plain(buffer);
         }
 
@@ -363,6 +385,7 @@ mod tests {
         find_in_text(
             &mut stdout_buffer,
             "title",
+            "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("Abc").build().unwrap(),
         )
@@ -370,6 +393,7 @@ mod tests {
         find_in_text(
             &mut stdout_buffer,
             "title",
+            "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("^").build().unwrap(),
         )
@@ -377,6 +401,7 @@ mod tests {
         find_in_text(
             &mut stdout_buffer,
             "title",
+            "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("Xyz\n").build().unwrap(),
         )
@@ -384,6 +409,7 @@ mod tests {
         find_in_text(
             &mut stdout_buffer,
             "title",
+            "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("\n").build().unwrap(),
         )
@@ -391,6 +417,7 @@ mod tests {
         find_in_text(
             &mut stdout_buffer,
             "title",
+            "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("123").build().unwrap(),
         )
