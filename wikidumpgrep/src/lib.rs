@@ -13,6 +13,7 @@ use std::fs;
 use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::str::from_utf8;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
@@ -39,6 +40,8 @@ pub enum Error {
     DumpFileOrPrefixInvalid(),
     #[error("No dump files found")]
     NoDumpFilesFound(),
+    #[error("Subcommand terminated unsuccessfully: {0}")]
+    SubCommandTerminatedUnsuccessfully(std::process::ExitStatus),
 }
 
 // unnest some XML parsing errors
@@ -119,22 +122,48 @@ pub fn search_dump(
     let re = RegexBuilder::new(regex).build()?;
     let stdout_writer = BufferWriter::stdout(color_choice);
     dump_files.into_par_iter().try_for_each(|dump_file| {
-        let dump_file = dump_file.as_ref();
-        let len = metadata(dump_file)?.len();
-        let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
-        let slice_size = ceiling_div(len, parts); // make sure to read to end
-
-        (0..parts).into_par_iter().try_for_each(|i| {
-            search_dump_part(
+        let dump_file: &str = dump_file.as_ref();
+        if dump_file.ends_with(".7z") {
+            let mut handle = Command::new("7z")
+                .args(&["e", "-so", /* "-mmt1",*/ dump_file])
+                .stdout(Stdio::piped())
+                .spawn()
+                .expect("7z invoke failed"); // FIXME
+            let stdout = handle.stdout.take().unwrap(); // FIXME
+            let buf_size = 2 * 1024 * 1024;
+            let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
+            search_dump_reader(
                 &stdout_writer,
                 &re,
-                dump_file,
-                i * slice_size,
-                (i + 1) * slice_size,
-                &namespaces,
+                &mut buf_reader,
+                0,
+                u64::MAX,
+                namespaces,
                 only_print_title,
-            )
-        })
+            )?;
+            let res = handle.wait()?;
+            if res.success() {
+                Ok(())
+            } else {
+                Err(Error::SubCommandTerminatedUnsuccessfully(res))
+            }
+        } else {
+            let len = metadata(dump_file)?.len();
+            let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
+            let slice_size = ceiling_div(len, parts); // make sure to read to end
+
+            (0..parts).into_par_iter().try_for_each(|i| {
+                search_dump_part(
+                    &stdout_writer,
+                    &re,
+                    dump_file,
+                    i * slice_size,
+                    (i + 1) * slice_size,
+                    &namespaces,
+                    only_print_title,
+                )
+            })
+        }
     })?;
 
     Ok(())
