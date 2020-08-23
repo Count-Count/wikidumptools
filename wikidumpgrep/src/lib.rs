@@ -264,7 +264,7 @@ pub fn search_dump_reader<B: BufRead>(
                                     stdout_buffer.clear();
                                 }
                             } else {
-                                find_in_page(&mut stdout_buffer, title.as_str(), text, &re)?;
+                                find_in_text(&mut stdout_buffer, title.as_str(), text, &re)?;
                                 stdout_writer.print(&stdout_buffer).unwrap();
                                 stdout_buffer.clear();
                             }
@@ -284,7 +284,7 @@ pub fn search_dump_reader<B: BufRead>(
 }
 
 #[inline(always)]
-fn find_in_page(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) -> Result<()> {
+fn find_in_text(buffer: &mut Buffer, title: &str, text: &str, re: &Regex) -> Result<()> {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
@@ -360,35 +360,35 @@ mod tests {
     fn test_print() {
         let stdout_writer = BufferWriter::stdout(ColorChoice::Auto);
         let mut stdout_buffer = stdout_writer.buffer();
-        find_in_page(
+        find_in_text(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("Abc").build().unwrap(),
         )
         .unwrap();
-        find_in_page(
+        find_in_text(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("^").build().unwrap(),
         )
         .unwrap();
-        find_in_page(
+        find_in_text(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("Xyz\n").build().unwrap(),
         )
         .unwrap();
-        find_in_page(
+        find_in_text(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("\n").build().unwrap(),
         )
         .unwrap();
-        find_in_page(
+        find_in_text(
             &mut stdout_buffer,
             "title",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
