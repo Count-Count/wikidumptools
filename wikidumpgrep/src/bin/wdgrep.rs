@@ -5,6 +5,7 @@
 // Distributed under the terms of the MIT license.
 
 use clap::{App, Arg};
+use rayon::ThreadPoolBuilder;
 use std::process;
 use std::time::Instant;
 use termcolor::ColorChoice;
@@ -41,6 +42,14 @@ fn main() {
                 .help("Only list title of articles containing matching text"),
         )
         .arg(
+            Arg::with_name("threads")
+                .short("j")
+                .long("threads")
+                .takes_value(true)
+                .value_name("NUM")
+                .help("Number of parallel threads to use. The default is the number of logical cpus."),
+        )
+        .arg(
             Arg::with_name("color")
                 .long("color")
                 .takes_value(true)
@@ -67,6 +76,21 @@ fn main() {
         eprintln!("{}", err);
         process::exit(1);
     });
+
+    let thread_count = matches
+        .value_of("threads")
+        .map(|val| val.parse::<usize>())
+        .unwrap_or(Ok(0))
+        .unwrap_or_else(|err| {
+            eprintln!("Invalid number specified for thread count");
+            process::exit(1);
+        });
+    if thread_count != 0 {
+        ThreadPoolBuilder::new()
+        .num_threads(thread_count)
+        .build_global()
+        .unwrap();
+    }
 
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
         "auto" => {
