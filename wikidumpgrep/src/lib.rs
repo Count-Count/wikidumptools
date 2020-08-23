@@ -14,7 +14,10 @@ use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::str::from_utf8;
+use std::{
+    str::from_utf8,
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[global_allocator]
@@ -112,15 +115,22 @@ pub fn ceiling_div(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
 
+pub struct SearchDumpResult {
+    pub bytes_processed: u64,
+    pub compressed_files_found: bool,
+}
+
 pub fn search_dump(
     regex: &str,
     dump_files: &[String],
     namespaces: &[&str],
     only_print_title: bool,
     color_choice: ColorChoice,
-) -> Result<()> {
+) -> Result<SearchDumpResult> {
     let re = RegexBuilder::new(regex).build()?;
     let stdout_writer = BufferWriter::stdout(color_choice);
+    let bytes_processed = AtomicU64::new(0);
+    let compressed_file_found = AtomicBool::new(false);
     dump_files.into_par_iter().try_for_each(|dump_file| {
         let dump_file: &str = dump_file.as_ref();
         if dump_file.ends_with(".7z") {
@@ -132,7 +142,7 @@ pub fn search_dump(
             let stdout = handle.stdout.take().unwrap(); // FIXME
             let buf_size = 2 * 1024 * 1024;
             let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
-            search_dump_reader(
+            let bytes_processed_0 = search_dump_reader(
                 &stdout_writer,
                 &re,
                 &mut buf_reader,
@@ -141,6 +151,8 @@ pub fn search_dump(
                 namespaces,
                 only_print_title,
             )?;
+            compressed_file_found.fetch_or(true, Ordering::SeqCst);
+            bytes_processed.fetch_add(bytes_processed_0, Ordering::SeqCst);
             let res = handle.wait()?;
             if res.success() {
                 Ok(())
@@ -153,7 +165,7 @@ pub fn search_dump(
             let slice_size = ceiling_div(len, parts); // make sure to read to end
 
             (0..parts).into_par_iter().try_for_each(|i| {
-                search_dump_part(
+                let bytes_processed_0 = search_dump_part(
                     &stdout_writer,
                     &re,
                     dump_file,
@@ -161,12 +173,17 @@ pub fn search_dump(
                     (i + 1) * slice_size,
                     &namespaces,
                     only_print_title,
-                )
+                )?;
+                bytes_processed.fetch_add(bytes_processed_0, Ordering::SeqCst);
+                Ok(())
             })
         }
     })?;
 
-    Ok(())
+    Ok(SearchDumpResult {
+        bytes_processed: bytes_processed.load(Ordering::SeqCst),
+        compressed_files_found: compressed_file_found.load(Ordering::SeqCst),
+    })
 }
 
 pub fn search_dump_part(
@@ -177,7 +194,7 @@ pub fn search_dump_part(
     end: u64,
     namespaces: &[&str],
     only_print_title: bool,
-) -> Result<()> {
+) -> Result<u64> {
     let mut file = File::open(&dump_file)?;
     file.seek(SeekFrom::Start(start))?;
     let buf_size = 2 * 1024 * 1024;
@@ -201,7 +218,7 @@ pub fn search_dump_reader<B: BufRead>(
     end: u64,
     namespaces: &[&str],
     only_print_title: bool,
-) -> Result<()> {
+) -> Result<u64> {
     let mut reader = Reader::from_reader(buf_reader);
     reader.check_end_names(false);
 
@@ -263,7 +280,7 @@ pub fn search_dump_reader<B: BufRead>(
             buf.clear();
         }
     }
-    Ok(())
+    Ok(reader.buffer_position() as u64)
 }
 
 #[inline(always)]

@@ -9,7 +9,7 @@ use rayon::ThreadPoolBuilder;
 use std::process;
 use std::time::Instant;
 use termcolor::ColorChoice;
-use wikidumpgrep::{get_dump_files, search_dump};
+use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult};
 
 fn main() {
     let matches = App::new("wikidumpgrep")
@@ -108,16 +108,30 @@ fn main() {
 
     let now = Instant::now();
     match search_dump(search_term, &dump_files, &namespaces, only_print_title, color_choice) {
-        Ok(()) => {
+        Ok(SearchDumpResult {
+            bytes_processed,
+            compressed_files_found,
+        }) => {
             let elapsed_seconds = now.elapsed().as_secs_f64();
             let mib_read = total_size as f64 / 1024.0 / 1024.0;
+            let mib_read_uncompressed = bytes_processed as f64 / 1024.0 / 1024.0;
             if matches.is_present("verbose") {
-                eprintln!(
-                    "Searched {:.2} MiB in {:.2} seconds ({:.2} MiB/s).",
-                    mib_read,
-                    elapsed_seconds,
-                    mib_read / elapsed_seconds
-                );
+                if compressed_files_found {
+                    eprintln!(
+                        "Searched {:.2} MiB compressed, {:.2} MiB uncompressed in {:.2} seconds ({:.2} MiB/s compressed, {:.2} MiB/s uncompressed).",
+                        mib_read, mib_read_uncompressed,
+                        elapsed_seconds,
+                        mib_read / elapsed_seconds,
+                        mib_read_uncompressed / elapsed_seconds
+                    );
+                } else {
+                    eprintln!(
+                        "Searched {:.2} MiB in {:.2} seconds ({:.2} MiB/s).",
+                        mib_read,
+                        elapsed_seconds,
+                        mib_read / elapsed_seconds
+                    );
+                }
             }
         }
         Err(err) => {
