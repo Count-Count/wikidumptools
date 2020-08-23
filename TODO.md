@@ -7,6 +7,7 @@
 - optimize: use less processes with 7z?
 - optimize: disable 7z multi-threading?
 - bug with -l -v the stats line is incorrectly colored
+- colored help
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, supremum, infimum)
@@ -16,6 +17,9 @@
 - progress display
 - output formats
 - check passed namespaces and allow textual namespace specification
+- README.md
+- multiple output formats: normal, csv, json, wikitext
+- for text output: one-line-per-match
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
