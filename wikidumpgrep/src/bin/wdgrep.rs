@@ -45,7 +45,7 @@ fn main() {
                 .short("j")
                 .long("threads")
                 .takes_value(true)
-                .value_name("NUM")
+                .value_name("num")
                 .help("Number of parallel threads to use. The default is the number of logical cpus."),
         )
         .arg(
@@ -53,6 +53,7 @@ fn main() {
                 .long("color")
                 .takes_value(true)
                 .possible_values(&["always", "auto", "never"])
+                .value_name("mode")
                 .help("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )
         .get_matches();
