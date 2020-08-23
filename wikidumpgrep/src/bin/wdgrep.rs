@@ -81,15 +81,15 @@ fn main() {
         .value_of("threads")
         .map(|val| val.parse::<usize>())
         .unwrap_or(Ok(0))
-        .unwrap_or_else(|err| {
+        .unwrap_or_else(|_err| {
             eprintln!("Invalid number specified for thread count");
             process::exit(1);
         });
     if thread_count != 0 {
         ThreadPoolBuilder::new()
-        .num_threads(thread_count)
-        .build_global()
-        .unwrap();
+            .num_threads(thread_count)
+            .build_global()
+            .unwrap();
     }
 
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
