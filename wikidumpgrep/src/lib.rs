@@ -8,6 +8,7 @@ use memchr::{memchr, memrchr};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use regex::{Regex, RegexBuilder};
 use std::fs;
 use std::fs::{metadata, File};
@@ -125,8 +126,15 @@ pub fn search_dump(
     dump_files: &[String],
     namespaces: &[&str],
     only_print_title: bool,
+    thread_count: Option<usize>,
     color_choice: ColorChoice,
 ) -> Result<SearchDumpResult> {
+    if thread_count.is_some() && thread_count.unwrap() != 0 {
+        ThreadPoolBuilder::new()
+            .num_threads(thread_count.unwrap())
+            .build_global()
+            .unwrap();
+    }
     let re = RegexBuilder::new(regex).build()?;
     let stdout_writer = BufferWriter::stdout(color_choice);
     let bytes_processed = AtomicU64::new(0);

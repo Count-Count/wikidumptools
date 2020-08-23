@@ -227,6 +227,7 @@ fn test_dump_searching() {
         &vec![get_dump_path().to_str().unwrap().to_owned()],
         &vec!["0"],
         false,
+        None,
         ColorChoice::Never,
     )
     .unwrap();

@@ -5,7 +5,6 @@
 // Distributed under the terms of the MIT license.
 
 use clap::{App, Arg};
-use rayon::ThreadPoolBuilder;
 use std::process;
 use std::time::Instant;
 use termcolor::ColorChoice;
@@ -80,17 +79,11 @@ fn main() {
     let thread_count = matches
         .value_of("threads")
         .map(|val| val.parse::<usize>())
-        .unwrap_or(Ok(0))
+        .transpose()
         .unwrap_or_else(|_err| {
             eprintln!("Invalid number specified for thread count");
             process::exit(1);
         });
-    if thread_count != 0 {
-        ThreadPoolBuilder::new()
-            .num_threads(thread_count)
-            .build_global()
-            .unwrap();
-    }
 
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
         "auto" => {
@@ -107,7 +100,14 @@ fn main() {
     let only_print_title = matches.is_present("list-titles");
 
     let now = Instant::now();
-    match search_dump(search_term, &dump_files, &namespaces, only_print_title, color_choice) {
+    match search_dump(
+        search_term,
+        &dump_files,
+        &namespaces,
+        only_print_title,
+        thread_count,
+        color_choice,
+    ) {
         Ok(SearchDumpResult {
             bytes_processed,
             compressed_files_found,
