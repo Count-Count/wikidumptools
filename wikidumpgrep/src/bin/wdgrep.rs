@@ -35,10 +35,10 @@ fn main() {
                 .help("Print performance statistics"),
         )
         .arg(
-            Arg::with_name("list-titles")
+            Arg::with_name("revisions-with-matches")
                 .short("l")
-                .long("list-titles")
-                .help("Only list title of articles containing matching text"),
+                .long("revisions-with-matches")
+                .help("Only list title and revision of articles containing matching text"),
         )
         .arg(
             Arg::with_name("threads")
@@ -98,7 +98,7 @@ fn main() {
         "never" => ColorChoice::Never,
         _ => unreachable!(),
     };
-    let only_print_title = matches.is_present("list-titles");
+    let only_print_title = matches.is_present("revisions-with-matches");
 
     let now = Instant::now();
     match search_dump(
