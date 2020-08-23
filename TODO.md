@@ -1,21 +1,18 @@
 # TODO
 
 ## Short-term
-- parallelity configurable
 - pass config object to search_dump()
 - check passed namespaces and allow textual namespace specification
-- search 7z files directly since extraction is not feasible (using 7z binary for now)
-- p7z on non-Windows, param
-- bz2 handling?
+- 7z binary param
+- bz2 handling? with perf. warning?
 - multi-revision searching
 - show performance statistics on break too (?)
 - optimize: use less processes with 7z?
-- optimize: disable parallelism with 7z?
+- optimize: disable 7z multi-threading?
 
 ## Long-term
-- handle bz2 compressed files
 - filter by title, user
-- search added text?
+- search added/removed text?
 - parse siteinfo and allow passing namespaces by name?
 - print all matching articles
 - print match statistics (how many matches in how many articles, percentage of pages matching, ...)
@@ -27,7 +24,7 @@
 - non-copying XML parser
 
 ## wdget
-- verify checksum while dl'ing
+- verify sha1/md5 checksums while dl'ing
 - colorize
 - list available dumps dates
 - mirror list/shortcut
