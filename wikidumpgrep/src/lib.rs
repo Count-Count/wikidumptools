@@ -15,10 +15,8 @@ use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::{
-    str::from_utf8,
-    sync::atomic::{AtomicBool, AtomicU64, Ordering},
-};
+use std::str::from_utf8;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[global_allocator]
