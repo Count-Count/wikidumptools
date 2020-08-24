@@ -2,8 +2,6 @@
 
 ## Short-term
 - bz2 handling? with perf. warning?
-- optimize: use less processes with 7z?
-- optimize: disable 7z multi-threading?
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
@@ -15,6 +13,10 @@
 - output formats: normal, csv, json, wikitext
 - for text output: one-line-per-match
 - ci, more tests
+- optimize: use less processes with 7z?
+- optimize: disable 7z multi-threading?
+- make use of index and parallelize single-file bzip2 extraction by using multi-streams
+- make use of index when bzip2 searching with --intitle
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
