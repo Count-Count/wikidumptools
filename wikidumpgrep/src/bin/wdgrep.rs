@@ -4,7 +4,7 @@
 //
 // Distributed under the terms of the MIT license.
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use std::process;
 use std::time::Instant;
 use termcolor::ColorChoice;
@@ -15,6 +15,7 @@ fn main() {
         .version("0.1")
         .author("Count Count <countvoncount123456@gmail.com>")
         .about("Search through Wikipedia dumps using a regex search term.")
+        .setting(AppSettings::ColoredHelp)
         .arg(Arg::with_name("search term").help("regex search term").required(true))
         .arg(
             Arg::with_name("dump file or prefix")
