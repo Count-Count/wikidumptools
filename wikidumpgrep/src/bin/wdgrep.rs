@@ -5,16 +5,17 @@
 // Distributed under the terms of the MIT license.
 
 use clap::{App, AppSettings, Arg};
+use std::io::Write;
 use std::process;
 use std::time::Instant;
-use termcolor::ColorChoice;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult};
 
-fn exit_with_error(msg: &str) -> ! {
-    eprintln!("{}", msg);
+fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
+    stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+    writeln!(stderr, "{}", msg).unwrap();
     process::exit(1);
 }
-
 fn main() {
     let matches = App::new("wikidumpgrep")
         .version("0.1")
@@ -64,32 +65,6 @@ fn main() {
         )
         .get_matches();
 
-    let search_term = matches.value_of("search term").unwrap();
-    let dump_file_or_prefix = matches.value_of("dump file or prefix").unwrap();
-    if dump_file_or_prefix.is_empty() {
-        exit_with_error("Non-empty dump file (prefix) needs to be specified.");
-    }
-
-    let namespaces: Vec<&str> = matches
-        .values_of("namespaces")
-        .unwrap_or_default()
-        .map(str::trim)
-        .filter(|x| !x.is_empty())
-        .collect();
-
-    let (dump_files, total_size) = get_dump_files(dump_file_or_prefix).unwrap_or_else(|err| {
-        exit_with_error(format!("{}", err).as_str());
-    });
-
-    let thread_count = matches
-        .value_of("threads")
-        .map(|val| val.parse::<usize>())
-        .transpose()
-        .unwrap_or_else(|_err| {
-            exit_with_error("Invalid number specified for thread count");
-        })
-        .filter(|n| *n != 0);
-
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
         "auto" => {
             if atty::is(atty::Stream::Stdout) {
@@ -102,6 +77,35 @@ fn main() {
         "never" => ColorChoice::Never,
         _ => unreachable!(),
     };
+
+    let mut stderr = StandardStream::stderr(color_choice);
+
+    let search_term = matches.value_of("search term").unwrap();
+    let dump_file_or_prefix = matches.value_of("dump file or prefix").unwrap();
+    if dump_file_or_prefix.is_empty() {
+        exit_with_error(&mut stderr, "Non-empty dump file (prefix) needs to be specified.");
+    }
+
+    let namespaces: Vec<&str> = matches
+        .values_of("namespaces")
+        .unwrap_or_default()
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .collect();
+
+    let (dump_files, total_size) = get_dump_files(dump_file_or_prefix).unwrap_or_else(|err| {
+        exit_with_error(&mut stderr, format!("{}", err).as_str());
+    });
+
+    let thread_count = matches
+        .value_of("threads")
+        .map(|val| val.parse::<usize>())
+        .transpose()
+        .unwrap_or_else(|_err| {
+            exit_with_error(&mut stderr, "Invalid number specified for thread count");
+        })
+        .filter(|n| *n != 0);
+
     let only_print_title = matches.is_present("revisions-with-matches");
 
     let now = Instant::now();
@@ -121,26 +125,51 @@ fn main() {
             let mib_read = total_size as f64 / 1024.0 / 1024.0;
             let mib_read_uncompressed = bytes_processed as f64 / 1024.0 / 1024.0;
             if matches.is_present("verbose") {
+                let mut number_hl_color = ColorSpec::new();
+                number_hl_color.set_fg(Some(Color::Yellow));
+
+                stderr.reset().unwrap();
                 if compressed_files_found {
-                    eprintln!(
-                        "Searched {:.2} MiB compressed, {:.2} MiB uncompressed in {:.2} seconds ({:.2} MiB/s compressed, {:.2} MiB/s uncompressed).",
-                        mib_read, mib_read_uncompressed,
-                        elapsed_seconds,
-                        mib_read / elapsed_seconds,
-                        mib_read_uncompressed / elapsed_seconds
-                    );
+                    write!(stderr, "Searched ").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", mib_read).unwrap();
+                    stderr.reset().unwrap();
+                    write!(stderr, " MiB compressed, ").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", mib_read_uncompressed).unwrap();
+                    stderr.reset().unwrap();
+                    write!(stderr, " MiB uncompressed in ").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", elapsed_seconds).unwrap();
+                    stderr.reset().unwrap();
+                    write!(stderr, " seconds (").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", mib_read / elapsed_seconds).unwrap();
+                    stderr.reset().unwrap();
+                    write!(stderr, " MiB/s compressed, ").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", mib_read_uncompressed / elapsed_seconds).unwrap();
+                    stderr.reset().unwrap();
+                    writeln!(stderr, " MiB/s uncompressed).").unwrap();
                 } else {
-                    eprintln!(
-                        "Searched {:.2} MiB in {:.2} seconds ({:.2} MiB/s).",
-                        mib_read,
-                        elapsed_seconds,
-                        mib_read / elapsed_seconds
-                    );
+                    write!(stderr, "Searched ").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", mib_read).unwrap();
+                    stderr.reset().unwrap();
+                    write!(stderr, " MiB in ").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", elapsed_seconds).unwrap();
+                    stderr.reset().unwrap();
+                    write!(stderr, " seconds (").unwrap();
+                    stderr.set_color(&number_hl_color).unwrap();
+                    write!(stderr, "{:.2}", mib_read / elapsed_seconds).unwrap();
+                    stderr.reset().unwrap();
+                    writeln!(stderr, " MiB/s).").unwrap();
                 }
             }
         }
         Err(err) => {
-            exit_with_error(format!("Error during search: {}", err).as_str());
+            exit_with_error(&mut stderr, format!("Error during search: {}", err).as_str());
         }
     }
 }
