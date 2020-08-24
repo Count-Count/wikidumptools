@@ -1,7 +1,6 @@
 # TODO
 
 ## Short-term
-- bz2 handling? with perf. warning?
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
