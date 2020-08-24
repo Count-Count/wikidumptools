@@ -383,6 +383,57 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
     }
     Ok(())
 }
+
+pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
+    let mut dump_files = Vec::new();
+    let mut total_size = 0;
+    let metadata = fs::metadata(dump_file_or_prefix);
+    match metadata {
+        Ok(metadata) => {
+            if !metadata.is_file() {
+                return Err(Error::DumpFileOrPrefixInvalid());
+            }
+            total_size += metadata.len();
+            dump_files.push(dump_file_or_prefix.to_owned());
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // check if prefix
+            let dump_file_or_prefix_path = Path::new(dump_file_or_prefix);
+            let parent_dir = dump_file_or_prefix_path.parent().map_or_else(
+                || Ok(std::env::current_dir().map_err(Error::CouldNotGetCurrentDir)?),
+                |path| Result::Ok(path.to_owned()),
+            )?;
+            if !parent_dir.is_dir() {
+                return Err(Error::DumpFileOrPrefixInvalid());
+            }
+            let prefix = dump_file_or_prefix_path
+                .file_name()
+                .ok_or(Error::DumpFileOrPrefixInvalid())?
+                .to_str()
+                .unwrap(); // must be UTF-8 because split from UTF-8 path
+            for entry in fs::read_dir(parent_dir)? {
+                let entry = entry?;
+                let metadata = entry.metadata()?;
+                if metadata.is_file() {
+                    let file_name = entry.file_name();
+                    let utf8_file_name = file_name.to_str().ok_or(Error::FileNameNotInUtf8())?;
+                    if utf8_file_name.starts_with(prefix) {
+                        dump_files.push(entry.path().to_str().ok_or(Error::FileNameNotInUtf8())?.to_owned());
+                        total_size += metadata.len();
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            return Err(Error::Io(e));
+        }
+    }
+    if dump_files.is_empty() {
+        return Err(Error::NoDumpFilesFound());
+    }
+    Ok((dump_files, total_size))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -433,54 +484,4 @@ mod tests {
         .unwrap();
         stdout_writer.print(&stdout_buffer).unwrap();
     }
-}
-
-pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
-    let mut dump_files = Vec::new();
-    let mut total_size = 0;
-    let metadata = fs::metadata(dump_file_or_prefix);
-    match metadata {
-        Ok(metadata) => {
-            if !metadata.is_file() {
-                return Err(Error::DumpFileOrPrefixInvalid());
-            }
-            total_size += metadata.len();
-            dump_files.push(dump_file_or_prefix.to_owned());
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // check if prefix
-            let dump_file_or_prefix_path = Path::new(dump_file_or_prefix);
-            let parent_dir = dump_file_or_prefix_path.parent().map_or_else(
-                || Ok(std::env::current_dir().map_err(Error::CouldNotGetCurrentDir)?),
-                |path| Result::Ok(path.to_owned()),
-            )?;
-            if !parent_dir.is_dir() {
-                return Err(Error::DumpFileOrPrefixInvalid());
-            }
-            let prefix = dump_file_or_prefix_path
-                .file_name()
-                .ok_or(Error::DumpFileOrPrefixInvalid())?
-                .to_str()
-                .unwrap(); // must be UTF-8 because split from UTF-8 path
-            for entry in fs::read_dir(parent_dir)? {
-                let entry = entry?;
-                let metadata = entry.metadata()?;
-                if metadata.is_file() {
-                    let file_name = entry.file_name();
-                    let utf8_file_name = file_name.to_str().ok_or(Error::FileNameNotInUtf8())?;
-                    if utf8_file_name.starts_with(prefix) {
-                        dump_files.push(entry.path().to_str().ok_or(Error::FileNameNotInUtf8())?.to_owned());
-                        total_size += metadata.len();
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            return Err(Error::Io(e));
-        }
-    }
-    if dump_files.is_empty() {
-        return Err(Error::NoDumpFilesFound());
-    }
-    Ok((dump_files, total_size))
 }
