@@ -130,12 +130,10 @@ pub fn search_dump(
     color_choice: ColorChoice,
 ) -> Result<SearchDumpResult> {
     if let Some(thread_count) = thread_count {
-        if thread_count != 0 {
-            ThreadPoolBuilder::new()
-                .num_threads(thread_count)
-                .build_global()
-                .unwrap();
-        }
+        ThreadPoolBuilder::new()
+            .num_threads(thread_count)
+            .build_global()
+            .unwrap();
     }
     let re = RegexBuilder::new(regex).build()?;
     let stdout_writer = BufferWriter::stdout(color_choice);

@@ -87,7 +87,8 @@ fn main() {
         .transpose()
         .unwrap_or_else(|_err| {
             exit_with_error("Invalid number specified for thread count");
-        });
+        })
+        .filter(|n| *n != 0);
 
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
         "auto" => {
