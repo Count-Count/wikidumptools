@@ -1,6 +1,7 @@
 # TODO
 
 ## Short-term
+- subprocess error handling
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
@@ -35,3 +36,4 @@
 - --no-progress
 - delete part files by default and until resum is implemented
 - shorter progress text to avoid terminal overlow at normal widths
+- extract while dl'ing bz2 files
