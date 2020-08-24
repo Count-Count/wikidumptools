@@ -110,7 +110,7 @@ fn set_plain(buffer: &mut Buffer) {
     buffer.set_color(ColorSpec::new().set_fg(None)).unwrap();
 }
 
-pub fn ceiling_div(x: u64, y: u64) -> u64 {
+fn ceiling_div(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
 
@@ -204,7 +204,7 @@ pub fn search_dump(
     })
 }
 
-pub fn search_dump_part(
+fn search_dump_part(
     stdout_writer: &BufferWriter,
     re: &Regex,
     dump_file: &str,
@@ -228,7 +228,7 @@ pub fn search_dump_part(
     )
 }
 
-pub fn search_dump_reader<B: BufRead>(
+fn search_dump_reader<B: BufRead>(
     stdout_writer: &BufferWriter,
     re: &Regex,
     buf_reader: &mut B,
