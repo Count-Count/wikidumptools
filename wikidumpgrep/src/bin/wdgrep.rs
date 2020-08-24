@@ -10,6 +10,11 @@ use std::time::Instant;
 use termcolor::ColorChoice;
 use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult};
 
+fn exit_with_error(msg: &str) -> ! {
+    eprintln!("{}", msg);
+    process::exit(1);
+}
+
 fn main() {
     let matches = App::new("wikidumpgrep")
         .version("0.1")
@@ -62,8 +67,7 @@ fn main() {
     let search_term = matches.value_of("search term").unwrap();
     let dump_file_or_prefix = matches.value_of("dump file or prefix").unwrap();
     if dump_file_or_prefix.is_empty() {
-        eprintln!("Non-empty dump file (prefix) needs to be specified.");
-        process::exit(1);
+        exit_with_error("Non-empty dump file (prefix) needs to be specified.");
     }
 
     let namespaces: Vec<&str> = matches
@@ -74,8 +78,7 @@ fn main() {
         .collect();
 
     let (dump_files, total_size) = get_dump_files(dump_file_or_prefix).unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        process::exit(1);
+        exit_with_error(format!("{}", err).as_str());
     });
 
     let thread_count = matches
@@ -83,8 +86,7 @@ fn main() {
         .map(|val| val.parse::<usize>())
         .transpose()
         .unwrap_or_else(|_err| {
-            eprintln!("Invalid number specified for thread count");
-            process::exit(1);
+            exit_with_error("Invalid number specified for thread count");
         });
 
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
@@ -137,8 +139,7 @@ fn main() {
             }
         }
         Err(err) => {
-            eprintln!("Error during search: {}", err);
-            process::exit(1);
+            exit_with_error(format!("Error during search: {}", err).as_str());
         }
     }
 }
