@@ -127,6 +127,8 @@ pub fn search_dump(
     namespaces: &[&str],
     only_print_title: bool,
     thread_count: Option<usize>,
+    binary_7z: Option<&str>,
+    options_7z: Option<&[&str]>,
     color_choice: ColorChoice,
 ) -> Result<SearchDumpResult> {
     if let Some(thread_count) = thread_count {
@@ -142,8 +144,9 @@ pub fn search_dump(
     dump_files.into_par_iter().try_for_each(|dump_file| {
         let dump_file: &str = dump_file.as_ref();
         if dump_file.ends_with(".7z") {
-            let mut handle = Command::new("7z")
-                .args(&["e", "-so", /* "-mmt1",*/ dump_file])
+            let mut handle = Command::new(binary_7z.unwrap_or("7z"))
+                .args(options_7z.unwrap_or(&["e", "-so"]))
+                .arg(dump_file)
                 .stdout(Stdio::piped())
                 .spawn()
                 .expect("7z invoke failed"); // FIXME

@@ -63,6 +63,20 @@ fn main() {
                 .value_name("mode")
                 .about("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )
+        .arg(
+            Arg::with_name("7z-binary")
+                .long("7z-binary")
+                .takes_value(true)
+                .value_name("path")
+                .about("Binary for extracting text from .7z files, defaults to \"7z\"."),
+        )
+        .arg(
+            Arg::with_name("7z-options")
+                .long("7z-options")
+                .takes_value(true)
+                .value_name("options")
+                .about("Options passed to 7z binary for extracting text from .7z files, defaults to \"e -so\"."),
+        )
         .get_matches();
 
     let color_choice = match matches.value_of("color").unwrap_or("auto") {
@@ -108,6 +122,8 @@ fn main() {
 
     let only_print_title = matches.is_present("revisions-with-matches");
 
+    let binary_7z = matches.value_of("7z-binary");
+    let options_7z = matches.value_of("7z-options").map(|s| s.split(' ').collect::<Vec<_>>());
     let now = Instant::now();
     match search_dump(
         search_term,
@@ -115,6 +131,8 @@ fn main() {
         &namespaces,
         only_print_title,
         thread_count,
+        binary_7z,
+        options_7z.as_deref(),
         color_choice,
     ) {
         Ok(SearchDumpResult {

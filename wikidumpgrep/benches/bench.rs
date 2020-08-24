@@ -228,6 +228,8 @@ fn test_dump_searching() {
         &vec!["0"],
         false,
         None,
+        None,
+        None,
         ColorChoice::Never,
     )
     .unwrap();
