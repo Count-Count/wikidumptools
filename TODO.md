@@ -1,13 +1,12 @@
 # TODO
 
 ## Short-term
-- 7z binary param, opts param
+- 7z: binary param, opts param
 - bz2 handling? with perf. warning?
 - show performance statistics on break too (?)
 - optimize: use less processes with 7z?
 - optimize: disable 7z multi-threading?
 - bug with -l -v the stats line is incorrectly colored
-- colored help
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, supremum, infimum)
@@ -20,6 +19,7 @@
 - README.md
 - multiple output formats: normal, csv, json, wikitext
 - for text output: one-line-per-match
+- ci, more tests
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
