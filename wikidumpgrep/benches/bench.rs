@@ -230,6 +230,8 @@ fn test_dump_searching() {
         None,
         None,
         None,
+        None,
+        None,
         ColorChoice::Never,
     )
     .unwrap();

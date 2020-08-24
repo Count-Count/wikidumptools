@@ -75,7 +75,23 @@ fn main() {
                 .long("7z-options")
                 .takes_value(true)
                 .value_name("options")
-                .about("Options passed to 7z binary for extracting text from .7z files, defaults to \"e -so\"."),
+                .about(
+                    "Options passed to 7z binary for extracting text from .7z files to stdout, defaults to \"e -so\".",
+                ),
+        )
+        .arg(
+            Arg::with_name("bzcat-binary")
+                .long("bzcat-binary")
+                .takes_value(true)
+                .value_name("path")
+                .about("Binary for extracting text from .bz2 files to stdout, defaults to \"bzcat\"."),
+        )
+        .arg(
+            Arg::with_name("bzcat-options")
+                .long("bzcat-options")
+                .takes_value(true)
+                .value_name("options")
+                .about("Options passed to bzcat binary for extracting text from .bz2 files, defaults to no options."),
         )
         .get_matches();
 
@@ -124,6 +140,21 @@ fn main() {
 
     let binary_7z = matches.value_of("7z-binary");
     let options_7z = matches.value_of("7z-options").map(|s| s.split(' ').collect::<Vec<_>>());
+
+    let binary_bzcat = matches.value_of("bzcat-binary");
+    let options_bzcat = matches
+        .value_of("bzcat-options")
+        .map(|s| s.split(' ').collect::<Vec<_>>());
+
+    if dump_files.iter().any(|f| f.ends_with(".bz2")) {
+        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).unwrap();
+        writeln!(
+            stderr,
+            "Warning: Searching compressed .bz2 files is very slow, use .7z files or uncompressed files instead."
+        )
+        .unwrap();
+    }
+
     let now = Instant::now();
     match search_dump(
         search_term,
@@ -133,6 +164,8 @@ fn main() {
         thread_count,
         binary_7z,
         options_7z.as_deref(),
+        binary_bzcat,
+        options_bzcat.as_deref(),
         color_choice,
     ) {
         Ok(SearchDumpResult {
