@@ -16,10 +16,10 @@ fn main() {
         .author("Count Count <countvoncount123456@gmail.com>")
         .about("Search through Wikipedia dumps using a regex search term.")
         .setting(AppSettings::ColoredHelp)
-        .arg(Arg::with_name("search term").help("regex search term").required(true))
+        .arg(Arg::with_name("search term").about("regex search term").required(true))
         .arg(
             Arg::with_name("dump file or prefix")
-                .help("The dump file or common prefix of muliple dump files to search")
+                .about("The dump file or common prefix of muliple dump files to search")
                 .required(true),
         )
         .arg(
@@ -27,27 +27,27 @@ fn main() {
                 .long("ns")
                 .takes_value(true)
                 .use_delimiter(true)
-                .help("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
+                .about("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(
             Arg::with_name("verbose")
-                .short("v")
+                .short('v')
                 .long("verbose")
-                .help("Print performance statistics"),
+                .about("Print performance statistics"),
         )
         .arg(
             Arg::with_name("revisions-with-matches")
-                .short("l")
+                .short('l')
                 .long("revisions-with-matches")
-                .help("Only list title and revision of articles containing matching text"),
+                .about("Only list title and revision of articles containing matching text"),
         )
         .arg(
             Arg::with_name("threads")
-                .short("j")
+                .short('j')
                 .long("threads")
                 .takes_value(true)
                 .value_name("num")
-                .help("Number of parallel threads to use. The default is the number of logical cpus."),
+                .about("Number of parallel threads to use. The default is the number of logical cpus."),
         )
         .arg(
             Arg::with_name("color")
@@ -55,14 +55,14 @@ fn main() {
                 .takes_value(true)
                 .possible_values(&["always", "auto", "never"])
                 .value_name("mode")
-                .help("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
+                .about("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )
         .get_matches();
 
     let search_term = matches.value_of("search term").unwrap();
     let dump_file_or_prefix = matches.value_of("dump file or prefix").unwrap();
     if dump_file_or_prefix.is_empty() {
-        eprintln!("{}", matches.usage());
+        eprintln!("Non-empty dump file (prefix) needs to be specified.");
         process::exit(1);
     }
 
