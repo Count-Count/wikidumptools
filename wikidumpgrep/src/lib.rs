@@ -42,8 +42,10 @@ pub enum Error {
     DumpFileOrPrefixInvalid(),
     #[error("No dump files found")]
     NoDumpFilesFound(),
-    #[error("Subcommand terminated unsuccessfully: {0}")]
-    SubCommandTerminatedUnsuccessfully(std::process::ExitStatus),
+    #[error("Subcommand could not be started: {0}")]
+    SubCommandCouldNotBeStarted(std::io::Error),
+    #[error("Subcommand terminated unsuccessfully. {0} Error output: '{1}'")]
+    SubCommandTerminatedUnsuccessfully(std::process::ExitStatus, String),
 }
 
 // unnest some XML parsing errors
@@ -152,12 +154,15 @@ pub fn search_dump(
                 command = Command::new(binary_bzcat.unwrap_or("bzcat"));
                 command.args(options_bzcat.unwrap_or(&[]));
             };
+            // necessary on Windows otherwise terminal colors are messed up MSYS binaries (even /bin/false)
+            command.stderr(Stdio::piped()).stdin(Stdio::piped());
+
             let mut handle = command
                 .arg(dump_file)
                 .stdout(Stdio::piped())
                 .spawn()
-                .expect("7z invoke failed"); // FIXME
-            let stdout = handle.stdout.take().unwrap(); // FIXME
+                .map_err(|e| Error::SubCommandCouldNotBeStarted(e))?;
+            let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
             let buf_size = 2 * 1024 * 1024;
             let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
             let bytes_processed_0 = search_dump_reader(
@@ -171,11 +176,14 @@ pub fn search_dump(
             )?;
             compressed_file_found.fetch_or(true, Ordering::Relaxed);
             bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
-            let res = handle.wait()?;
-            if res.success() {
+            let res = handle.wait_with_output()?; // needed since stderr is piped
+            if res.status.success() {
                 Ok(())
             } else {
-                Err(Error::SubCommandTerminatedUnsuccessfully(res))
+                Err(Error::SubCommandTerminatedUnsuccessfully(
+                    res.status,
+                    from_utf8(res.stderr.as_ref())?.to_owned(),
+                ))
             }
         } else {
             let len = metadata(dump_file)?.len();
