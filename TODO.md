@@ -36,3 +36,9 @@
 - delete part files by default and until resum is implemented
 - shorter progress text to avoid terminal overlow at normal widths
 - extract while dl'ing bz2 files
+- list-types: also show #files, total size, description
+- unwrap: host not found
+- retry/continue on connection error?
+
+## further ideas:
+- wdcat, wdls
