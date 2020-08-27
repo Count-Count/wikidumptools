@@ -190,16 +190,6 @@ async fn download(
             // partial download not yet implemented
             todo!();
         }
-        let mut partfile = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&partfile_name)
-            .map_err(|e| {
-                WDGetError::DumpPartFileAccessError(
-                    partfile_name.clone(),
-                    std::format!("Could not create part file: {0}", e),
-                )
-            })?;
         if verbose {
             eprint!("Downloading {}...", filename);
             std::io::stderr().flush().unwrap();
@@ -217,6 +207,16 @@ async fn download(
         let mut prev_bytes_read = 0u64;
         let mut prev_time = Instant::now();
         let mut last_printed_progress_len = 0;
+        let mut partfile = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&partfile_name)
+            .map_err(|e| {
+                WDGetError::DumpPartFileAccessError(
+                    partfile_name.clone(),
+                    std::format!("Could not create part file: {0}", e),
+                )
+            })?;
         loop {
             tokio::select! {
                 chunk = r.chunk() => {
