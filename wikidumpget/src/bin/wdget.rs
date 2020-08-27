@@ -4,7 +4,6 @@
 //
 // Distributed under the terms of the MIT license.
 
-use atty;
 use clap::{App, AppSettings, Arg};
 use reqwest::Client;
 use serde::Deserialize;

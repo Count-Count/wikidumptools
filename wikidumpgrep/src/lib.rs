@@ -161,7 +161,7 @@ pub fn search_dump(
                 .arg(dump_file)
                 .stdout(Stdio::piped())
                 .spawn()
-                .map_err(|e| Error::SubCommandCouldNotBeStarted(e))?;
+                .map_err(Error::SubCommandCouldNotBeStarted)?;
             let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
             let buf_size = 2 * 1024 * 1024;
             let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
