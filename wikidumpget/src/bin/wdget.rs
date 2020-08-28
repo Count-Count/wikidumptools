@@ -166,7 +166,8 @@ async fn download_file(
     }
     let mut r = client.get(url).send().await?.error_for_status()?;
     let mut partfile = OpenOptions::new()
-        .create_new(true)
+        .create(true)
+        .truncate(true)
         .write(true)
         .open(&partfile_name)
         .map_err(|e| {
@@ -349,7 +350,7 @@ async fn download(
             continue;
         }
         let partfile_name = create_partfile_name(filename);
-        if Path::new(&partfile_name).exists() {
+        if resume_partial && Path::new(&partfile_name).exists() {
             let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
                 WDGetError::DumpFileAccessError(
                     partfile_name.clone(),
