@@ -378,7 +378,7 @@ async fn download(
         }
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, filename);
         let download_res = download_file(&url, filename, &partfile_name, file_data, &client, verbose).await;
-        if !keep_partial && download_res.is_err() {
+        if !keep_partial && download_res.is_err() && Path::new(&partfile_name).is_file() {
             remove_file(&partfile_name)
                 .or_else::<(), _>(|err| {
                     eprintln!("Could not remove {}: {}", &partfile_name, &err);
