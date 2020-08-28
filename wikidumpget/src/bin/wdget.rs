@@ -8,6 +8,7 @@ use clap::{App, AppSettings, Arg};
 use fs::remove_file;
 use reqwest::Client;
 use serde::Deserialize;
+use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::OpenOptions;
@@ -34,8 +35,8 @@ pub enum WDGetError {
     DumpNotComplete(),
     #[error("Dump does not contain any files")]
     DumpHasNoFiles(),
-    #[error("Error accessing dump part file {0} - {1}")]
-    DumpPartFileAccessError(String, String),
+    #[error("Error accessing file {0} - {1}")]
+    DumpFileAccessError(String, String),
     #[error("Aborted by user")]
     AbortedByUser(),
 }
@@ -157,7 +158,7 @@ async fn download_file(
         .write(true)
         .open(&partfile_name)
         .map_err(|e| {
-            WDGetError::DumpPartFileAccessError(
+            WDGetError::DumpFileAccessError(
                 partfile_name.to_owned(),
                 std::format!("Could not create part file: {0}", e),
             )
@@ -177,7 +178,7 @@ async fn download_file(
             chunk = r.chunk() => {
                 if let Some(chunk) = chunk? {
                     partfile.write_all(chunk.as_ref()).map_err(|e| {
-                        WDGetError::DumpPartFileAccessError(
+                        WDGetError::DumpFileAccessError(
                             partfile_name.to_owned(),
                             std::format!("Write error: {0}", e),
                         )
@@ -222,7 +223,7 @@ async fn download_file(
         };
     }
     std::fs::rename(&partfile_name, &filename).map_err(|e| {
-        WDGetError::DumpPartFileAccessError(
+        WDGetError::DumpFileAccessError(
             partfile_name.to_owned(),
             std::format!("Could not rename part file: {0}", e),
         )
@@ -238,6 +239,77 @@ async fn download_file(
         );
     } else {
         println!("Downloaded {}.", &filename);
+    }
+    Ok(())
+}
+
+fn check_existing_file(filename: &str, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
+    let file_metadata = fs::metadata(&filename).map_err(|e| {
+        WDGetError::DumpFileAccessError(
+            filename.to_owned(),
+            std::format!("Could not get file information: {0}", e),
+        )
+    })?;
+    if let Some(expected_file_size) = &file_data.size {
+        if *expected_file_size != file_metadata.len() {
+            return Err(WDGetError::DumpFileAccessError(
+                filename.to_owned(),
+                std::format!(
+                    "Dump file {} already exists, but its size does not match the expected size. Expected: {}, actual: {}.",
+                    &filename, expected_file_size, file_metadata.len()
+                ),
+            ));
+        }
+    }
+    match file_data.sha1.as_ref() {
+        Some(expected_sha1) => {
+            let mut file = fs::File::open(&filename).map_err(|e| {
+                WDGetError::DumpFileAccessError(
+                    filename.to_owned(),
+                    std::format!("Could not read mapping file {}: {}", filename, e),
+                )
+            })?;
+            if verbose {
+                eprint!("Verifying {}...", &filename);
+                std::io::stderr().flush().unwrap();
+            }
+            let start_time = Instant::now();
+            let mut hasher = Sha1::new();
+            let hashed_bytes = std::io::copy(&mut file, &mut hasher).map_err(|e| {
+                WDGetError::DumpFileAccessError(
+                    filename.to_owned(),
+                    std::format!("Could not read mapping file {}: {}", filename, e),
+                )
+            })?;
+            let sha1_bytes = hasher.finalize();
+            let actual_sha1 = format!("{:x}", sha1_bytes);
+            if expected_sha1 != &actual_sha1 {
+                return Err(WDGetError::DumpFileAccessError(
+                    filename.to_owned(),
+                    std::format!(
+                        "{} already exists but the SHA1 digest differs from the expected one.",
+                        filename
+                    ),
+                ));
+            };
+            if verbose {
+                eprintln!(
+                    "\rVerified {} - OK - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
+                    &filename,
+                    hashed_bytes as f64 / 1024.0 / 1024.0,
+                    start_time.elapsed().as_secs_f64(),
+                    hashed_bytes as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
+                );
+            } else {
+                println!("Verified {} - OK.", &filename);
+            }
+        }
+        None => {
+            eprintln!(
+                "WARNING: {} already exists but cannot be checked due to missing SHA1 checksum, skipping download.",
+                &filename
+            );
+        }
     }
     Ok(())
 }
@@ -260,24 +332,27 @@ async fn download(
     let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
     let client = create_client()?;
     for (filename, file_data) in files {
-        // TODO: sha1/md5/size checking
+        if Path::new(&filename).exists() {
+            check_existing_file(&filename, &file_data, verbose)?;
+            continue;
+        }
         let partfile_name = create_partfile_name(filename);
         if Path::new(&partfile_name).exists() {
             let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
-                WDGetError::DumpPartFileAccessError(
+                WDGetError::DumpFileAccessError(
                     partfile_name.clone(),
                     std::format!("Could not get file information: {0}", e),
                 )
             })?;
             if !partfile_metadata.is_file() {
-                return Err(WDGetError::DumpPartFileAccessError(
+                return Err(WDGetError::DumpFileAccessError(
                     partfile_name.clone(),
                     "Expected regular file".to_owned(),
                 ));
             }
             let part_len = partfile_metadata.len();
             if file_data.size.is_some() && part_len > file_data.size.unwrap() {
-                return Err(WDGetError::DumpPartFileAccessError(
+                return Err(WDGetError::DumpFileAccessError(
                     partfile_name.clone(),
                     std::format!(
                         "Existing part file is longer than expected: {0} > {1}",
