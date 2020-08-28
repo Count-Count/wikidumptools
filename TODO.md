@@ -16,6 +16,7 @@
 - optimize: disable 7z multi-threading?
 - make use of index and parallelize single-file bzip2 extraction by using multi-streams
 - make use of index when bzip2 searching with --intitle
+- 10MiB 7z test file in repo
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
@@ -26,7 +27,7 @@
 - progress display
 
 ## wdget
-- verify sha1/md5 checksums while dl'ing/after dl (?)
+- verify sha1 checksums while dl'ing (?)
 - colorize
 - list available dumps dates
 - mirror list/shortcut
@@ -35,10 +36,14 @@
 - --no-progress
 - shorter progress text to avoid terminal overflow at normal widths
 - extract while dl'ing bz2 files
-- list-types: also show #files, total size, description
+- list-types: also show #files, total size, description as table
 - --overwrite (--force ?)
 - --resume-partial/--keep-partial
 - automatically try again if intermittent network issue?
+- verify subcommand
+- "latest" as date
+- show list-wikis as table
 
 ## further ideas:
 - wdcat, wdls
+- better error handling
