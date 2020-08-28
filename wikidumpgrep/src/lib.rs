@@ -16,7 +16,10 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str::from_utf8;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::{
+    num::NonZeroUsize,
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[global_allocator]
@@ -126,7 +129,7 @@ pub fn search_dump(
     dump_files: &[String],
     namespaces: &[&str],
     only_print_title: bool,
-    thread_count: Option<usize>,
+    thread_count: Option<NonZeroUsize>,
     binary_7z: Option<&str>,
     options_7z: Option<&[&str]>,
     binary_bzcat: Option<&str>,
@@ -135,7 +138,7 @@ pub fn search_dump(
 ) -> Result<SearchDumpResult> {
     if let Some(thread_count) = thread_count {
         ThreadPoolBuilder::new()
-            .num_threads(thread_count)
+            .num_threads(thread_count.get())
             .build_global()
             .unwrap();
     }

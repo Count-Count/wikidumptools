@@ -7,7 +7,7 @@
 use clap::{App, AppSettings, Arg};
 use std::io::Write;
 use std::process;
-use std::time::Instant;
+use std::{num::NonZeroUsize, time::Instant};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult};
 
@@ -129,12 +129,11 @@ fn main() {
 
     let thread_count = matches
         .value_of("threads")
-        .map(|val| val.parse::<usize>())
+        .map(|val| val.parse::<NonZeroUsize>())
         .transpose()
         .unwrap_or_else(|_err| {
             exit_with_error(&mut stderr, "Invalid number specified for thread count");
-        })
-        .filter(|n| *n != 0);
+        });
 
     let only_print_title = matches.is_present("revisions-with-matches");
 
