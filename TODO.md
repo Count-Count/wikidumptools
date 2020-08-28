@@ -26,19 +26,19 @@
 - progress display
 
 ## wdget
-- verify sha1/md5 checksums while dl'ing
+- verify sha1/md5 checksums while dl'ing/after dl (?)
 - colorize
 - list available dumps dates
 - mirror list/shortcut
 - --target-dir
 - option to unpack while dl?
 - --no-progress
-- delete part files by default and until resum is implemented
-- shorter progress text to avoid terminal overlow at normal widths
+- shorter progress text to avoid terminal overflow at normal widths
 - extract while dl'ing bz2 files
 - list-types: also show #files, total size, description
-- unwrap: host not found
-- retry/continue on connection error?
+- --overwrite (--force ?)
+- --resume-partial/--keep-partial
+- automatically try again if intermittent network issue?
 
 ## further ideas:
 - wdcat, wdls
