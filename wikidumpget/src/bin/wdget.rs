@@ -43,15 +43,21 @@ pub enum WDGetError {
 
 type Result<T> = std::result::Result<T, WDGetError>;
 
-async fn get_available_wikis_from_wikidata() -> Result<Vec<String>> {
+struct Wiki {
+    id: String,
+    name: String,
+}
+
+async fn get_available_wikis_from_wikidata() -> Result<Vec<Wiki>> {
     let mut wikis = Vec::with_capacity(50);
     let sparql_url = "https://query.wikidata.org/sparql";
-    let query = "
-      SELECT DISTINCT ?id WHERE {
+    let query = r#"
+    SELECT DISTINCT ?id ?itemLabel WHERE {
         ?item p:P1800/ps:P1800 ?id.
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
         FILTER(NOT EXISTS { ?item wdt:P31 wd:Q33120923. })
-      }
-      ";
+    }
+    "#;
     let blacklist = ["ecwikimedia", "labswiki", "labtestwiki", "ukwikiversity"];
     let client = create_client()?;
     let r = client
@@ -66,11 +72,17 @@ async fn get_available_wikis_from_wikidata() -> Result<Vec<String>> {
         .as_array()
         .ok_or(WDGetError::InvalidJsonFromWikidata())?;
     for binding in bindings {
-        let value = binding["id"]["value"]
+        let id = binding["id"]["value"]
             .as_str()
             .ok_or(WDGetError::InvalidJsonFromWikidata())?;
-        if !blacklist.contains(&value) {
-            wikis.push(value.to_owned());
+        let label = binding["itemLabel"]["value"]
+            .as_str()
+            .ok_or(WDGetError::InvalidJsonFromWikidata())?;
+        if !blacklist.contains(&id) {
+            wikis.push(Wiki {
+                id: id.to_owned(),
+                name: label.to_owned(),
+            });
         }
     }
     Ok(wikis)
@@ -78,9 +90,9 @@ async fn get_available_wikis_from_wikidata() -> Result<Vec<String>> {
 
 async fn list_wikis() -> Result<()> {
     let mut wikis = get_available_wikis_from_wikidata().await?;
-    wikis.sort();
-    for wiki in wikis {
-        println!("{}", wiki);
+    wikis.sort_unstable_by(|e1, e2| e1.id.cmp(&e2.id));
+    for ref wiki in wikis {
+        println!("{} - {}", wiki.id.as_str(), wiki.name.as_str());
     }
     Ok(())
 }
