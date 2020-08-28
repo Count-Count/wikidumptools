@@ -5,6 +5,7 @@
 // Distributed under the terms of the MIT license.
 
 use clap::{App, AppSettings, Arg};
+use fs::remove_file;
 use reqwest::Client;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -35,6 +36,8 @@ pub enum WDGetError {
     DumpHasNoFiles(),
     #[error("Error accessing dump part file {0} - {1}")]
     DumpPartFileAccessError(String, String),
+    #[error("Aborted by user")]
+    AbortedByUser(),
 }
 
 type Result<T> = std::result::Result<T, WDGetError>;
@@ -116,10 +119,7 @@ struct DumpFileInfo {
 
 async fn get_dump_status(wiki: &str, date: &str) -> Result<DumpStatus> {
     let client = create_client()?;
-    let url = format!(
-        "https://dumps.wikimedia.org/{}/{}/dumpstatus.json",
-        wiki, date
-    );
+    let url = format!("https://dumps.wikimedia.org/{}/{}/dumpstatus.json", wiki, date);
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
     let body = r.text().await?;
     Ok(serde_json::from_str(body.as_str())?)
@@ -139,25 +139,125 @@ fn create_partfile_name(filename: &str) -> String {
     res
 }
 
+async fn download_file(
+    url: &str,
+    filename: &str,
+    partfile_name: &str,
+    file_data: &DumpFileInfo,
+    client: &Client,
+    verbose: bool,
+) -> Result<()> {
+    if verbose {
+        eprint!("Downloading {}...", filename);
+        std::io::stderr().flush().unwrap();
+    }
+    let mut r = client.get(url).send().await?.error_for_status()?;
+    let mut partfile = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&partfile_name)
+        .map_err(|e| {
+            WDGetError::DumpPartFileAccessError(
+                partfile_name.to_owned(),
+                std::format!("Could not create part file: {0}", e),
+            )
+        })?;
+    let mut bytes_read: u64 = 0;
+    let progress_update_period = time::Duration::from_secs(1);
+    let mut progress_update_interval = time::interval_at(
+        tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
+        progress_update_period,
+    );
+    let start_time = Instant::now();
+    let mut prev_bytes_read = 0u64;
+    let mut prev_time = Instant::now();
+    let mut last_printed_progress_len = 0;
+    loop {
+        tokio::select! {
+            chunk = r.chunk() => {
+                if let Some(chunk) = chunk? {
+                    partfile.write_all(chunk.as_ref()).map_err(|e| {
+                        WDGetError::DumpPartFileAccessError(
+                            partfile_name.to_owned(),
+                            std::format!("Write error: {0}", e),
+                        )
+                    })?;
+                    bytes_read += chunk.len() as u64;
+                } else {
+                    // done
+                    if verbose {
+                        // clear progress
+                        eprint!("\r{:1$}\r","",last_printed_progress_len);
+                        std::io::stderr().flush().unwrap();
+                    }
+                    break;
+                }
+            },
+            _ = progress_update_interval.tick() => {
+                if verbose {
+                    if let Some(file_data_size) = file_data.size {
+                        let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
+                        let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                        let mut progress_string = std::format!(
+                            "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
+                            &filename,
+                            bytes_read as f64 / 1024.0 / 1024.0,
+                            total_mib,
+                            mib_per_sec);
+                        let new_printed_progress_len = progress_string.chars().count();
+                        for _ in new_printed_progress_len..last_printed_progress_len {
+                            progress_string.push(' ');
+                        }
+                        eprint!("{}", progress_string);
+                        std::io::stderr().flush().unwrap();
+                        last_printed_progress_len = new_printed_progress_len;
+                        prev_bytes_read = bytes_read;
+                        prev_time = Instant::now();
+                    }
+                }
+            },
+            _ = tokio::signal::ctrl_c() => {
+                return Err(WDGetError::AbortedByUser());
+            }
+        };
+    }
+    std::fs::rename(&partfile_name, &filename).map_err(|e| {
+        WDGetError::DumpPartFileAccessError(
+            partfile_name.to_owned(),
+            std::format!("Could not rename part file: {0}", e),
+        )
+    })?;
+
+    if verbose {
+        eprintln!(
+            "Downloaded {} - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
+            &filename,
+            bytes_read as f64 / 1024.0 / 1024.0,
+            start_time.elapsed().as_secs_f64(),
+            bytes_read as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
+        );
+    } else {
+        println!("Downloaded {}.", &filename);
+    }
+    Ok(())
+}
+
 async fn download(
     wiki: &str,
     date: &str,
     dump_type: &str,
     mirror: Option<&str>,
     verbose: bool,
+    keep_partial: bool,
+    resume_partial: bool,
 ) -> Result<()> {
     let dump_status = get_dump_status(wiki, date).await?;
-    let job_info = dump_status
-        .jobs
-        .get(dump_type)
-        .ok_or(WDGetError::DumpTypeNotFound())?;
+    let job_info = dump_status.jobs.get(dump_type).ok_or(WDGetError::DumpTypeNotFound())?;
     if &job_info.status != "done" {
         return Err(WDGetError::DumpNotComplete());
     }
-    let files = job_info
-        .files
-        .as_ref()
-        .ok_or(WDGetError::DumpHasNoFiles())?;
+    let files = job_info.files.as_ref().ok_or(WDGetError::DumpHasNoFiles())?;
+    let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
     let client = create_client()?;
     for (filename, file_data) in files {
         // TODO: sha1/md5/size checking
@@ -189,105 +289,23 @@ async fn download(
             // partial download not yet implemented
             todo!();
         }
-        if verbose {
-            eprint!("Downloading {}...", filename);
-            std::io::stderr().flush().unwrap();
-        }
-        let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, filename);
-        let mut r = client.get(url.as_str()).send().await?.error_for_status()?;
-        let mut bytes_read: u64 = 0;
-        let progress_update_period = time::Duration::from_secs(1);
-        let mut progress_update_interval = time::interval_at(
-            tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
-            progress_update_period,
-        );
-        let start_time = Instant::now();
-        let mut prev_bytes_read = 0u64;
-        let mut prev_time = Instant::now();
-        let mut last_printed_progress_len = 0;
-        let mut partfile = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&partfile_name)
-            .map_err(|e| {
-                WDGetError::DumpPartFileAccessError(
-                    partfile_name.clone(),
-                    std::format!("Could not create part file: {0}", e),
-                )
-            })?;
-        loop {
-            tokio::select! {
-                chunk = r.chunk() => {
-                    if let Some(chunk) = chunk? {
-                        partfile.write_all(chunk.as_ref()).map_err(|e| {
-                            WDGetError::DumpPartFileAccessError(
-                                partfile_name.clone(),
-                                std::format!("Write error: {0}", e),
-                            )
-                        })?;
-                        bytes_read += chunk.len() as u64;
-                    } else {
-                        // done
-                        if verbose {
-                            // clear progress
-                            eprint!("\r{:1$}\r","",last_printed_progress_len);
-                            std::io::stderr().flush().unwrap();
-                        }
-                        break;
-                    }
-                },
-                _ = progress_update_interval.tick() => {
-                    if verbose {
-                        if let Some(file_data_size) = file_data.size {
-                            let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
-                            let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                            let mut progress_string = std::format!(
-                                "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                                &filename,
-                                bytes_read as f64 / 1024.0 / 1024.0,
-                                total_mib,
-                                mib_per_sec);
-                            let new_printed_progress_len = progress_string.chars().count();
-                            for _ in new_printed_progress_len..last_printed_progress_len {
-                                progress_string.push(' ');
-                            }
-                            eprint!("{}", progress_string);
-                            std::io::stderr().flush().unwrap();
-                            last_printed_progress_len = new_printed_progress_len;
-                            prev_bytes_read = bytes_read;
-                            prev_time = Instant::now();
-                        }
-                    }
-                }
-            };
+        let download_res = download_file(&url, filename, &partfile_name, file_data, &client, verbose).await;
+        if !keep_partial && download_res.is_err() {
+            remove_file(&partfile_name)
+                .or_else::<(), _>(|err| {
+                    eprintln!("Could not remove {}: {}", &partfile_name, &err);
+                    Ok(())
+                })
+                .unwrap();
         }
-        std::fs::rename(&partfile_name, &filename).map_err(|e| {
-            WDGetError::DumpPartFileAccessError(
-                partfile_name.clone(),
-                std::format!("Could not rename part file: {0}", e),
-            )
-        })?;
-
-        if verbose {
-            eprintln!(
-                "Downloaded {} - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
-                &filename,
-                bytes_read as f64 / 1024.0 / 1024.0,
-                start_time.elapsed().as_secs_f64(),
-                bytes_read as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
-            );
-        } else {
-            println!("Downloaded {}.", &filename);
-        }
+        download_res?;
     }
     Ok(())
 }
 
 async fn run() -> Result<()> {
-    let wiki_name_arg = Arg::with_name("wiki name")
-        .help("Name of the wiki")
-        .required(true);
+    let wiki_name_arg = Arg::with_name("wiki name").help("Name of the wiki").required(true);
     let dump_date_arg = Arg::with_name("dump date")
         .help("Date of the dump (YYYYMMDD)")
         .required(true);
@@ -309,11 +327,7 @@ async fn run() -> Result<()> {
                 .about("Download a wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
-                .arg(
-                    Arg::with_name("dump type")
-                        .help("Type of the dump")
-                        .required(true),
-                )
+                .arg(Arg::with_name("dump type").help("Type of the dump").required(true))
                 .arg(
                     Arg::with_name("mirror")
                         .long("mirror")
@@ -363,6 +377,8 @@ async fn run() -> Result<()> {
                 subcommand_matches.value_of("dump type").unwrap(),
                 subcommand_matches.value_of("mirror"),
                 matches.is_present("verbose"),
+                false,
+                false,
             )
             .await?
         }
