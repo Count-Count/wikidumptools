@@ -139,7 +139,17 @@ async fn get_dump_status(wiki: &str, date: &str) -> Result<DumpStatus> {
 async fn list_types(wiki: &str, date: &str) -> Result<()> {
     let dump_status = get_dump_status(wiki, date).await?;
     for (job_name, job_info) in &dump_status.jobs {
-        println!("{} - status: {}", &job_name, &job_info.status);
+        if let Some(files) = &job_info.files {
+            let sum = files.values().map(|info| info.size.unwrap_or(0)).sum::<u64>();
+            println!(
+                "{} - status: {} - size: {:.2} MiB",
+                &job_name,
+                &job_info.status,
+                sum as f64 / 1024.0 / 1024.0
+            );
+        } else {
+            println!("{} - status: {}", &job_name, &job_info.status);
+        }
     }
     Ok(())
 }
