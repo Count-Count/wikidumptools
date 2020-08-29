@@ -122,9 +122,7 @@ struct DumpJobInfo {
 struct DumpFileInfo {
     #[allow(dead_code)]
     url: Option<String>,
-    #[allow(dead_code)]
     sha1: Option<String>,
-    #[allow(dead_code)]
     size: Option<u64>,
     #[allow(dead_code)]
     md5: Option<String>,
