@@ -37,6 +37,8 @@ pub enum Error {
     Regex(#[from] regex::Error),
     #[error("Only text expected in {0}")]
     OnlyTextExpectedInTag(String),
+    #[error("Unexpected empty tag found: {0}")]
+    UnexpectedEmptyTag(String),
     #[error("Could not get current directory: {0}")]
     CouldNotGetCurrentDir(std::io::Error),
     #[error("File name not in UTF-8 format")]
@@ -84,20 +86,68 @@ where
     }
 }
 
-enum SkipResult {
+enum SkipToStartTagOrEofResult {
     StartTagFound,
     EOF,
 }
 
 #[inline(always)]
-fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<SkipResult> {
+fn skip_to_start_tag_or_eof<T: BufRead>(
+    reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+    tag_name: &[u8],
+) -> Result<SkipToStartTagOrEofResult> {
     loop {
         match reader.read_event(buf)? {
             Event::Start(ref e) if e.name() == tag_name => {
-                return Ok(SkipResult::StartTagFound);
+                return Ok(SkipToStartTagOrEofResult::StartTagFound);
+            }
+            Event::Empty(ref e) if e.name() == tag_name => {
+                return Err(Error::UnexpectedEmptyTag(from_utf8(tag_name)?.to_owned()));
             }
             Event::Eof => {
-                return Ok(SkipResult::EOF);
+                return Ok(SkipToStartTagOrEofResult::EOF);
+            }
+            _other_event => {}
+        }
+        buf.clear();
+    }
+}
+
+#[inline(always)]
+fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
+    if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(reader, buf, tag_name)? {
+        return Err(Error::Xml(quick_xml::Error::UnexpectedEof(
+            from_utf8(tag_name)?.to_owned(),
+        )));
+    }
+    Ok(())
+}
+
+enum SkipToStartTagOrEmptyTagResult {
+    StartTagFound,
+    EmptyTagFound,
+}
+
+#[inline(always)]
+fn skip_to_start_tag_or_empty_tag<T: BufRead>(
+    reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+    tag_name: &[u8],
+) -> Result<SkipToStartTagOrEmptyTagResult> {
+    loop {
+        let event = reader.read_event(buf)?;
+        match event {
+            Event::Start(ref e) if e.name() == tag_name => {
+                return Ok(SkipToStartTagOrEmptyTagResult::StartTagFound);
+            }
+            Event::Empty(ref e) if e.name() == tag_name => {
+                return Ok(SkipToStartTagOrEmptyTagResult::EmptyTagFound);
+            }
+            Event::Eof => {
+                return Err(Error::Xml(quick_xml::Error::UnexpectedEof(
+                    from_utf8(tag_name)?.to_owned(),
+                )));
             }
             _other_event => {}
         }
@@ -168,7 +218,7 @@ pub fn search_dump(
             let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
             let buf_size = 2 * 1024 * 1024;
             let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
-            let bytes_processed_0 = search_dump_reader(
+            let search_res = search_dump_reader(
                 &stdout_writer,
                 &re,
                 &mut buf_reader,
@@ -176,7 +226,11 @@ pub fn search_dump(
                 u64::MAX,
                 namespaces,
                 only_print_title,
-            )?;
+            );
+            if search_res.is_err() {
+                eprintln!("Error searching {}", dump_file);
+            }
+            let bytes_processed_0 = search_res?;
             compressed_file_found.fetch_or(true, Ordering::Relaxed);
             bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
             let res = handle.wait_with_output()?; // needed since stderr is piped
@@ -258,7 +312,7 @@ fn search_dump_reader<B: BufRead>(
     let mut stdout_buffer = stdout_writer.buffer();
 
     loop {
-        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"page")? {
+        if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(&mut reader, &mut buf, b"page")? {
             break;
         }
         let page_tag_start_pos = reader.buffer_position() as u64 + start - b"<page>".len() as u64;
@@ -284,37 +338,36 @@ fn search_dump_reader<B: BufRead>(
                         }
                     }
                     b"revision" => {
-                        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"id")? {
-                            return Err(Error::Xml(quick_xml::Error::UnexpectedEof("id".to_owned())));
-                        }
+                        skip_to_start_tag(&mut reader, &mut buf, b"id")?;
                         read_text_and_then(&mut reader, &mut buf, "id", |text| {
                             revision_id.clear();
                             revision_id.push_str(text);
                             Ok(())
                         })?;
-                        if let SkipResult::EOF = skip_to_start_tag(&mut reader, &mut buf, b"text")? {
-                            return Err(Error::Xml(quick_xml::Error::UnexpectedEof("text".to_owned())));
-                        }
-                        read_text_and_then(&mut reader, &mut buf, "text", |text| {
-                            if only_print_title_and_revision {
-                                if re.is_match(text) {
-                                    set_color(&mut stdout_buffer, Color::Cyan);
-                                    write!(&mut stdout_buffer, "{}", title.as_str()).unwrap();
-                                    set_plain(&mut stdout_buffer);
-                                    write!(&mut stdout_buffer, "@").unwrap();
-                                    set_color(&mut stdout_buffer, Color::Yellow);
-                                    writeln!(&mut stdout_buffer, "{}", revision_id.as_str()).unwrap();
-                                    set_plain(&mut stdout_buffer);
+                        if let SkipToStartTagOrEmptyTagResult::StartTagFound =
+                            skip_to_start_tag_or_empty_tag(&mut reader, &mut buf, b"text")?
+                        {
+                            read_text_and_then(&mut reader, &mut buf, "text", |text| {
+                                if only_print_title_and_revision {
+                                    if re.is_match(text) {
+                                        set_color(&mut stdout_buffer, Color::Cyan);
+                                        write!(&mut stdout_buffer, "{}", title.as_str()).unwrap();
+                                        set_plain(&mut stdout_buffer);
+                                        write!(&mut stdout_buffer, "@").unwrap();
+                                        set_color(&mut stdout_buffer, Color::Yellow);
+                                        writeln!(&mut stdout_buffer, "{}", revision_id.as_str()).unwrap();
+                                        set_plain(&mut stdout_buffer);
+                                        stdout_writer.print(&stdout_buffer).unwrap();
+                                        stdout_buffer.clear();
+                                    }
+                                } else {
+                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, &re)?;
                                     stdout_writer.print(&stdout_buffer).unwrap();
                                     stdout_buffer.clear();
                                 }
-                            } else {
-                                find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, &re)?;
-                                stdout_writer.print(&stdout_buffer).unwrap();
-                                stdout_buffer.clear();
-                            }
-                            Ok(())
-                        })?;
+                                Ok(())
+                            })?;
+                        }
                     }
                     _other_tag => { /* ignore */ }
                 },
