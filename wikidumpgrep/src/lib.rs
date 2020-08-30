@@ -207,7 +207,7 @@ pub fn search_dump(
                 command = Command::new(binary_bzcat.unwrap_or("bzcat"));
                 command.args(options_bzcat.unwrap_or(&[]));
             };
-            // necessary on Windows otherwise terminal colors are messed up MSYS binaries (even /bin/false)
+            // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
             command.stderr(Stdio::piped()).stdin(Stdio::piped());
 
             let mut handle = command
