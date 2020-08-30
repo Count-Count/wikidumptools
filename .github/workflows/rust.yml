@@ -14,9 +14,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-18.04, ubuntu-20.04]    
+        os: [macos-latest, windows-latest, ubuntu-18.04, ubuntu-20.04]
+        toolchain: [stable, nightly]
     steps:
     - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          override: true
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -27,7 +32,7 @@ jobs:
       - uses: actions/checkout@v1
       - uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
+            toolchain: ${{ matrix.toolchain }}
             components: clippy
             override: true
       - uses: actions-rs/clippy-check@v1
