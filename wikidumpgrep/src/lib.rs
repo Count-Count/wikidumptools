@@ -547,6 +547,8 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
                     }
                 }
             }
+
+            // if there are multiple versions of the same file prefer plain to .7z to .bz2
             dump_files.sort_unstable();
 
             fn get_stem(s: &str) -> &str {
