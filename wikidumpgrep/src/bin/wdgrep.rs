@@ -147,9 +147,9 @@ fn main() {
         .map(|binary| search_options.with_binary_7z(binary));
 
     let options_7z = matches.value_of("7z-options").map(|s| s.split(' ').collect::<Vec<_>>());
-    options_7z.as_ref().map(|options| {
+    if let Some(options) = options_7z.as_ref() {
         search_options.with_options_7z(options);
-    });
+    }
 
     matches
         .value_of("bzcat-binary")
@@ -158,9 +158,9 @@ fn main() {
     let options_bzcat = matches
         .value_of("bzcat-options")
         .map(|s| s.split(' ').collect::<Vec<_>>());
-    options_bzcat.as_ref().map(|options| {
+    if let Some(options) = options_bzcat.as_ref() {
         search_options.with_options_bzcat(options);
-    });
+    }
 
     if dump_files.iter().any(|f| f.ends_with(".bz2")) {
         stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).unwrap();

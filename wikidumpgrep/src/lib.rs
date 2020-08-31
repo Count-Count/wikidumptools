@@ -230,6 +230,11 @@ impl<'a> SearchOptions<'a> {
         self
     }
 }
+impl<'a> Default for SearchOptions<'a> {
+    fn default() -> Self {
+        SearchOptions::new()
+    }
+}
 
 pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOptions) -> Result<SearchDumpResult> {
     if let Some(thread_count) = search_options.thread_count {
