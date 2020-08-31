@@ -1,6 +1,7 @@
 # TODO
 
 ## Short-term
+- pass config object
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
@@ -27,22 +28,24 @@
 - progress display
 
 ## wdget
+- use anyhow for errors?
 - verify sha1 checksums while dl'ing (?)
 - colorize
 - list available dumps dates
+- "latest" as date
 - mirror list/shortcut
-- --target-dir
 - option to unpack while dl?
-- --no-progress
-- shorter progress text to avoid terminal overflow at normal widths
+- two-line progress text to avoid terminal overflow at normal widths
 - extract while dl'ing bz2 files
 - list-types: also show #files, total size, description as table
 - --overwrite (--force ?)
 - --resume-partial/--keep-partial
 - automatically try again if intermittent network issue?
 - verify subcommand
-- "latest" as date
+- don't verify if files exist (?)
 - show list-wikis as table
+- supress progress with --no-progress or --quiet instead of !-verbose
+- --target-dir
 
 ## further ideas:
 - wdcat, wdls
