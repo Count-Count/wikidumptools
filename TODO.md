@@ -1,7 +1,6 @@
 # TODO
 
 ## Short-term
-- pass config object
 
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
