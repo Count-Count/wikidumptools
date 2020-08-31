@@ -9,7 +9,7 @@ use std::io::Write;
 use std::process;
 use std::{num::NonZeroUsize, time::Instant};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult};
+use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 
 fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
     stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
@@ -116,34 +116,51 @@ fn main() {
         exit_with_error(&mut stderr, "Non-empty dump file (prefix) needs to be specified.");
     }
 
-    let namespaces: Vec<&str> = matches
-        .values_of("namespaces")
-        .unwrap_or_default()
-        .map(str::trim)
-        .filter(|x| !x.is_empty())
-        .collect();
-
     let (dump_files, total_size) = get_dump_files(dump_file_or_prefix).unwrap_or_else(|err| {
         exit_with_error(&mut stderr, format!("{}", err).as_str());
     });
 
-    let thread_count = matches
+    let mut search_options = SearchOptions::new();
+
+    search_options.with_color_choice(color_choice);
+
+    let namespaces: Option<Vec<&str>> = matches
+        .values_of("namespaces")
+        .map(|val| val.map(str::trim).filter(|x| !x.is_empty()).collect());
+    namespaces
+        .as_deref()
+        .map(|namespaces| search_options.restrict_namespaces(namespaces));
+
+    matches
         .value_of("threads")
         .map(|val| val.parse::<NonZeroUsize>())
         .transpose()
         .unwrap_or_else(|_err| {
             exit_with_error(&mut stderr, "Invalid number specified for thread count");
-        });
+        })
+        .map(|thread_count| search_options.with_thread_count(thread_count));
 
-    let only_print_title = matches.is_present("revisions-with-matches");
+    search_options.only_print_title(matches.is_present("revisions-with-matches"));
 
-    let binary_7z = matches.value_of("7z-binary");
+    matches
+        .value_of("7z-binary")
+        .map(|binary| search_options.with_binary_7z(binary));
+
     let options_7z = matches.value_of("7z-options").map(|s| s.split(' ').collect::<Vec<_>>());
+    options_7z.as_ref().map(|options| {
+        search_options.with_options_7z(options);
+    });
 
-    let binary_bzcat = matches.value_of("bzcat-binary");
+    matches
+        .value_of("bzcat-binary")
+        .map(|binary| search_options.with_binary_bzcat(binary));
+
     let options_bzcat = matches
         .value_of("bzcat-options")
         .map(|s| s.split(' ').collect::<Vec<_>>());
+    options_bzcat.as_ref().map(|options| {
+        search_options.with_options_bzcat(options);
+    });
 
     if dump_files.iter().any(|f| f.ends_with(".bz2")) {
         stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).unwrap();
@@ -155,18 +172,7 @@ fn main() {
     }
 
     let now = Instant::now();
-    match search_dump(
-        search_term,
-        &dump_files,
-        &namespaces,
-        only_print_title,
-        thread_count,
-        binary_7z,
-        options_7z.as_deref(),
-        binary_bzcat,
-        options_bzcat.as_deref(),
-        color_choice,
-    ) {
+    match search_dump(search_term, &dump_files, &search_options) {
         Ok(SearchDumpResult {
             bytes_processed,
             compressed_files_found,

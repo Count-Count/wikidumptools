@@ -13,8 +13,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
-use termcolor::ColorChoice;
-use wikidumpgrep::search_dump;
+use wikidumpgrep::{search_dump, SearchOptions};
 
 pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
     let mut group = c.benchmark_group("file-io");
@@ -222,17 +221,12 @@ fn test_dump_reading_direct(buf_size: usize) {
 }
 
 fn test_dump_searching() {
+    let mut search_options = SearchOptions::new();
+    search_options.restrict_namespaces(&["0"]);
     search_dump(
         "xyabcdefghijk",
         &vec![get_dump_path().to_str().unwrap().to_owned()],
-        &vec!["0"],
-        false,
-        None,
-        None,
-        None,
-        None,
-        None,
-        ColorChoice::Never,
+        &search_options,
     )
     .unwrap();
 }

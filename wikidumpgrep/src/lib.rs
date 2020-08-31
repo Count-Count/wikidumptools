@@ -174,26 +174,72 @@ pub struct SearchDumpResult {
     pub compressed_files_found: bool,
 }
 
-pub fn search_dump(
-    regex: &str,
-    dump_files: &[String],
-    namespaces: &[&str],
+pub struct SearchOptions<'a> {
+    restrict_namespaces: Option<&'a [&'a str]>,
     only_print_title: bool,
     thread_count: Option<NonZeroUsize>,
-    binary_7z: Option<&str>,
-    options_7z: Option<&[&str]>,
-    binary_bzcat: Option<&str>,
-    options_bzcat: Option<&[&str]>,
+    binary_7z: &'a str,
+    options_7z: &'a [&'a str],
+    binary_bzcat: &'a str,
+    options_bzcat: &'a [&'a str],
     color_choice: ColorChoice,
-) -> Result<SearchDumpResult> {
-    if let Some(thread_count) = thread_count {
+}
+impl<'a> SearchOptions<'a> {
+    pub fn new() -> SearchOptions<'a> {
+        SearchOptions {
+            restrict_namespaces: None,
+            only_print_title: false,
+            thread_count: None,
+            binary_7z: "7z",
+            options_7z: &["e", "-so"],
+            binary_bzcat: "bzcat",
+            options_bzcat: &[],
+            color_choice: ColorChoice::Never,
+        }
+    }
+    pub fn restrict_namespaces(&mut self, restrict_namespaces: &'a [&'a str]) -> &mut SearchOptions<'a> {
+        self.restrict_namespaces = Some(restrict_namespaces);
+        self
+    }
+    pub fn only_print_title(&mut self, only_print_title: bool) -> &mut SearchOptions<'a> {
+        self.only_print_title = only_print_title;
+        self
+    }
+    pub fn with_thread_count(&mut self, thread_count: NonZeroUsize) -> &mut SearchOptions<'a> {
+        self.thread_count = Some(thread_count);
+        self
+    }
+    pub fn with_binary_7z(&mut self, binary_7z: &'a str) -> &mut SearchOptions<'a> {
+        self.binary_7z = binary_7z;
+        self
+    }
+    pub fn with_options_7z(&mut self, options_7z: &'a [&'a str]) -> &mut SearchOptions<'a> {
+        self.options_7z = options_7z;
+        self
+    }
+    pub fn with_binary_bzcat(&mut self, binary_bzcat: &'a str) -> &mut SearchOptions<'a> {
+        self.binary_bzcat = binary_bzcat;
+        self
+    }
+    pub fn with_options_bzcat(&mut self, options_bzcat: &'a [&'a str]) -> &mut SearchOptions<'a> {
+        self.options_bzcat = options_bzcat;
+        self
+    }
+    pub fn with_color_choice(&mut self, color_choice: ColorChoice) -> &mut SearchOptions<'a> {
+        self.color_choice = color_choice;
+        self
+    }
+}
+
+pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOptions) -> Result<SearchDumpResult> {
+    if let Some(thread_count) = search_options.thread_count {
         ThreadPoolBuilder::new()
             .num_threads(thread_count.get())
             .build_global()
             .unwrap();
     }
     let re = RegexBuilder::new(regex).build()?;
-    let stdout_writer = BufferWriter::stdout(color_choice);
+    let stdout_writer = BufferWriter::stdout(search_options.color_choice);
     let bytes_processed = AtomicU64::new(0);
     let compressed_file_found = AtomicBool::new(false);
     dump_files.into_par_iter().try_for_each(|dump_file| {
@@ -201,11 +247,11 @@ pub fn search_dump(
         if dump_file.ends_with(".7z") || dump_file.ends_with(".bz2") {
             let mut command;
             if dump_file.ends_with(".7z") {
-                command = Command::new(binary_7z.unwrap_or("7z"));
-                command.args(options_7z.unwrap_or(&["e", "-so"]));
+                command = Command::new(search_options.binary_7z);
+                command.args(search_options.options_7z);
             } else {
-                command = Command::new(binary_bzcat.unwrap_or("bzcat"));
-                command.args(options_bzcat.unwrap_or(&[]));
+                command = Command::new(search_options.binary_bzcat);
+                command.args(search_options.options_bzcat);
             };
             // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
             command.stderr(Stdio::piped()).stdin(Stdio::piped());
@@ -224,8 +270,8 @@ pub fn search_dump(
                 &mut buf_reader,
                 0,
                 u64::MAX,
-                namespaces,
-                only_print_title,
+                search_options.restrict_namespaces.unwrap_or(&[]),
+                search_options.only_print_title,
             );
             if search_res.is_err() {
                 eprintln!("Error searching {}", dump_file);
@@ -254,8 +300,8 @@ pub fn search_dump(
                     dump_file,
                     i * slice_size,
                     (i + 1) * slice_size,
-                    &namespaces,
-                    only_print_title,
+                    search_options.restrict_namespaces.unwrap_or(&[]),
+                    search_options.only_print_title,
                 )?;
                 bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
                 Ok(())
