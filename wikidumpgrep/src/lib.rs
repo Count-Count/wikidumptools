@@ -275,7 +275,7 @@ pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOp
                 &mut buf_reader,
                 0,
                 u64::MAX,
-                search_options.restrict_namespaces.unwrap_or(&[]),
+                search_options.restrict_namespaces,
                 search_options.only_print_title,
             );
             if search_res.is_err() {
@@ -305,7 +305,7 @@ pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOp
                     dump_file,
                     i * slice_size,
                     (i + 1) * slice_size,
-                    search_options.restrict_namespaces.unwrap_or(&[]),
+                    search_options.restrict_namespaces,
                     search_options.only_print_title,
                 )?;
                 bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
@@ -326,7 +326,7 @@ fn search_dump_part(
     dump_file: &str,
     start: u64,
     end: u64,
-    namespaces: &[&str],
+    restrict_namespaces: Option<&[&str]>,
     only_print_title: bool,
 ) -> Result<u64> {
     let mut file = File::open(&dump_file)?;
@@ -339,7 +339,7 @@ fn search_dump_part(
         &mut buf_reader,
         start,
         end,
-        namespaces,
+        restrict_namespaces,
         only_print_title,
     )
 }
@@ -350,7 +350,7 @@ fn search_dump_reader<B: BufRead>(
     buf_reader: &mut B,
     start: u64,
     end: u64,
-    namespaces: &[&str],
+    restrict_namespaces: Option<&[&str]>,
     only_print_title_and_revision: bool,
 ) -> Result<u64> {
     let mut reader = Reader::from_reader(buf_reader);
@@ -381,11 +381,13 @@ fn search_dump_reader<B: BufRead>(
                         })?;
                     }
                     b"ns" => {
-                        let skip = read_text_and_then(&mut reader, &mut buf, "ns", |text| {
-                            Ok(!namespaces.is_empty() && !namespaces.iter().any(|i| *i == text))
-                        })?;
-                        if skip {
-                            break;
+                        if let Some(restrict_namespaces) = restrict_namespaces {
+                            let skip = read_text_and_then(&mut reader, &mut buf, "ns", |text| {
+                                Ok(!restrict_namespaces.iter().any(|i| *i == text))
+                            })?;
+                            if skip {
+                                break;
+                            }
                         }
                     }
                     b"revision" => {
