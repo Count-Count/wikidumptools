@@ -496,6 +496,25 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
                     }
                 }
             }
+            dump_files.sort_unstable();
+
+            fn get_stem(s: &str) -> &str {
+                if s.ends_with(".7z") {
+                    &s[..s.len() - ".7z".len()]
+                } else if s.ends_with(".bz2") {
+                    &s[..s.len() - ".bz2".len()]
+                } else {
+                    s
+                }
+            }
+            let mut i = 0;
+            while i + 1 < dump_files.len() {
+                if get_stem(dump_files[i].as_str()) == get_stem(dump_files[i + 1].as_str()) {
+                    dump_files.remove(i + 1);
+                    continue;
+                }
+                i += 1;
+            }
         }
         Err(e) => {
             return Err(Error::Io(e));
