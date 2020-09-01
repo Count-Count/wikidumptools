@@ -6,8 +6,9 @@
 
 use clap::{App, AppSettings, Arg};
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::process;
-use std::{num::NonZeroUsize, time::Instant};
+use std::time::Instant;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 
