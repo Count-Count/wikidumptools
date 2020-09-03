@@ -27,23 +27,23 @@
 - progress display
 
 ## wdget
-- use anyhow for errors?
-- verify sha1 checksums while dl'ing (?)
-- colorize
 - list available dumps dates
 - "latest" as date
 - mirror list/shortcut
-- option to unpack while dl?
 - two-line progress text to avoid terminal overflow at normal widths
-- extract while dl'ing bz2 files
 - list-types: also show #files, total size, description as table
+- show list-wikis as table
+- supress progress with --no-progress or --quiet instead of !-verbose, only show progress with tty
+
+- use anyhow for errors?
+- verify sha1 checksums while dl'ing only with --verify option
+- colorize (+clap colorize)
+- option to unpack while dl'ing?
+- extract bz2 files while dl'ing
 - --overwrite (--force ?)
 - --resume-partial/--keep-partial
 - automatically try again if intermittent network issue?
-- verify subcommand
-- don't verify if files exist (?)
-- show list-wikis as table
-- supress progress with --no-progress or --quiet instead of !-verbose
+- verify (given files) subcommand
 - --target-dir
 
 ## further ideas:
