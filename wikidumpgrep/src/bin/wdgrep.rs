@@ -23,33 +23,33 @@ fn main() {
         .author("Count Count <countvoncount123456@gmail.com>")
         .about("Search through Wikipedia dumps using a regex search term.")
         .setting(AppSettings::ColoredHelp)
-        .arg(Arg::with_name("search term").about("regex search term").required(true))
+        .arg(Arg::new("search term").about("regex search term").required(true))
         .arg(
-            Arg::with_name("dump file or prefix")
+            Arg::new("dump file or prefix")
                 .about("The dump file or common prefix of muliple dump files to search")
                 .required(true),
         )
         .arg(
-            Arg::with_name("namespaces")
+            Arg::new("namespaces")
                 .long("ns")
                 .takes_value(true)
                 .use_delimiter(true)
                 .about("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(
-            Arg::with_name("verbose")
+            Arg::new("verbose")
                 .short('v')
                 .long("verbose")
                 .about("Print performance statistics"),
         )
         .arg(
-            Arg::with_name("revisions-with-matches")
+            Arg::new("revisions-with-matches")
                 .short('l')
                 .long("revisions-with-matches")
                 .about("Only list title and revision of articles containing matching text"),
         )
         .arg(
-            Arg::with_name("threads")
+            Arg::new("threads")
                 .short('j')
                 .long("threads")
                 .takes_value(true)
@@ -57,7 +57,7 @@ fn main() {
                 .about("Number of parallel threads to use. The default is the number of logical cpus."),
         )
         .arg(
-            Arg::with_name("color")
+            Arg::new("color")
                 .long("color")
                 .takes_value(true)
                 .possible_values(&["always", "auto", "never"])
@@ -65,14 +65,14 @@ fn main() {
                 .about("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )
         .arg(
-            Arg::with_name("7z-binary")
+            Arg::new("7z-binary")
                 .long("7z-binary")
                 .takes_value(true)
                 .value_name("path")
                 .about("Binary for extracting text from .7z files, defaults to \"7z\"."),
         )
         .arg(
-            Arg::with_name("7z-options")
+            Arg::new("7z-options")
                 .long("7z-options")
                 .takes_value(true)
                 .value_name("options")
@@ -81,14 +81,14 @@ fn main() {
                 ),
         )
         .arg(
-            Arg::with_name("bzcat-binary")
+            Arg::new("bzcat-binary")
                 .long("bzcat-binary")
                 .takes_value(true)
                 .value_name("path")
                 .about("Binary for extracting text from .bz2 files to stdout, defaults to \"bzcat\"."),
         )
         .arg(
-            Arg::with_name("bzcat-options")
+            Arg::new("bzcat-options")
                 .long("bzcat-options")
                 .takes_value(true)
                 .value_name("options")

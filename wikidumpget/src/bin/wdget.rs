@@ -401,9 +401,9 @@ async fn download(
 }
 
 async fn run() -> Result<()> {
-    let wiki_name_arg = Arg::with_name("wiki name").help("Name of the wiki").required(true);
-    let dump_date_arg = Arg::with_name("dump date")
-        .help("Date of the dump (YYYYMMDD)")
+    let wiki_name_arg = Arg::new("wiki name").about("Name of the wiki").required(true);
+    let dump_date_arg = Arg::new("dump date")
+        .about("Date of the dump (YYYYMMDD)")
         .required(true);
 
     let matches = App::new("wikidumget")
@@ -413,21 +413,21 @@ async fn run() -> Result<()> {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DeriveDisplayOrder)
         .arg(
-            Arg::with_name("verbose")
-                .short("v")
+            Arg::new("verbose")
+                .short('v')
                 .long("verbose")
-                .help("Print performance statistics"),
+                .about("Print performance statistics"),
         )
         .subcommand(
             App::new("download")
                 .about("Download a wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
-                .arg(Arg::with_name("dump type").help("Type of the dump").required(true))
+                .arg(Arg::new("dump type").about("Type of the dump").required(true))
                 .arg(
-                    Arg::with_name("mirror")
+                    Arg::new("mirror")
                         .long("mirror")
-                        .help("Root mirror URL")
+                        .about("Root mirror URL")
                         .takes_value(true)
                         .max_values(1),
                 ),

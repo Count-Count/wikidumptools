@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 quick-xml = "0.18.1"
 regex = "1"
-clap = "3.0.0-beta.1"
+clap = "3.0.0-beta.2"
 memchr = "2.3.3"
 termcolor = "1.1"
 rayon = "1.3.1"
