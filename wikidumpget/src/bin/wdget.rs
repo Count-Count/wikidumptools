@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 use termcolor::ColorChoice;
-use thiserror::Error;
+use thiserror::*; // should be thiserror::Error, but https://github.com/rust-analyzer/rust-analyzer/issues/6053
 use tokio::time;
 
 #[derive(Error, Debug)]
