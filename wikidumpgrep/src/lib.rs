@@ -183,6 +183,7 @@ pub struct SearchOptions<'a> {
     color_choice: ColorChoice,
 }
 impl<'a> SearchOptions<'a> {
+    #[must_use]
     pub fn new() -> SearchOptions<'a> {
         SearchOptions {
             restrict_namespaces: None,

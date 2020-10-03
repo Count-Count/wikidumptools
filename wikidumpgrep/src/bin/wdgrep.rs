@@ -134,7 +134,7 @@ fn main() {
 
     matches
         .value_of("threads")
-        .map(|val| val.parse::<NonZeroUsize>())
+        .map(str::parse::<NonZeroUsize>)
         .transpose()
         .unwrap_or_else(|_err| {
             exit_with_error(&mut stderr, "Invalid number specified for thread count");

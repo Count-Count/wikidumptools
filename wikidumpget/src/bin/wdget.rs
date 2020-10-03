@@ -191,7 +191,7 @@ async fn download_file(
         progress_update_period,
     );
     let start_time = Instant::now();
-    let mut prev_bytes_read = 0u64;
+    let mut prev_bytes_read = 0_u64;
     let mut prev_time = Instant::now();
     let mut last_printed_progress_len = 0;
     loop {
