@@ -579,6 +579,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::trivial_regex)]
     fn test_print() {
         let stdout_writer = BufferWriter::stdout(ColorChoice::Auto);
         let mut stdout_buffer = stdout_writer.buffer();

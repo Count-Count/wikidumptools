@@ -25,7 +25,7 @@ pub fn criterion_benchmark_file_reading(c: &mut Criterion) {
 
     static KB: usize = 1024;
     static MB: usize = KB * 1024;
-    for buf_size in [1 * MB, 2 * MB, 4 * MB].iter() {
+    for buf_size in [MB, 2 * MB, 4 * MB].iter() {
         group.bench_with_input(BenchmarkId::new("file-reading", buf_size), &buf_size, |b, &buf_size| {
             b.iter(|| test_dump_reading(*buf_size));
         });
@@ -43,7 +43,7 @@ pub fn criterion_benchmark_file_reading_bz2(c: &mut Criterion) {
 
     static KB: usize = 1024;
     static MB: usize = KB * 1024;
-    for buf_size in [1 * MB, 2 * MB, 4 * MB].iter() {
+    for buf_size in [MB, 2 * MB, 4 * MB].iter() {
         group.bench_with_input(
             BenchmarkId::new("file-reading-bz2", buf_size),
             &buf_size,
@@ -106,7 +106,7 @@ pub fn criterion_benchmark_simple_search(c: &mut Criterion) {
         .throughput(Throughput::Bytes(fs::metadata(get_dump_path()).unwrap().len()));
 
     group.bench_function("simple-search", |b| {
-        b.iter(|| test_dump_searching());
+        b.iter(test_dump_searching);
     });
     group.finish();
 }
@@ -225,7 +225,7 @@ fn test_dump_searching() {
     search_options.restrict_namespaces(&["0"]);
     search_dump(
         "xyabcdefghijk",
-        &vec![get_dump_path().to_str().unwrap().to_owned()],
+        &[get_dump_path().to_str().unwrap().to_owned()],
         &search_options,
     )
     .unwrap();
