@@ -403,9 +403,16 @@ async fn download(
     Ok(())
 }
 
-async fn update() -> Result<()> {
-    let mut api = mediawiki::api::Api::new("https://de.wikipedia.org/w/api.php").await?;
+struct WikiCredentials<'a> {
+    username: &'a str,
+    password: &'a str,
+}
 
+async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
+    let mut api = mediawiki::api::Api::new("https://en.wikipedia.org/w/api.php").await?;
+    if let Some(credentials) = credentials {
+        api.login(credentials.username, credentials.password).await?;
+    }
     let params = api.params_into(&[("action", "query"), ("meta", "userinfo"), ("uiprop", "rights")]);
     let res = api.get_query_api_json_all(&params).await?;
     let apihighlimits = res["query"]["userinfo"]["rights"]
@@ -567,7 +574,7 @@ async fn run() -> Result<()> {
             .await?
         }
         "update" => {
-            update().await?;
+            update(None).await?;
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }
