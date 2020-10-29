@@ -426,7 +426,7 @@ async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
     let params = api.params_into(&[
         ("action", "query"),
         ("list", "recentchanges"),
-        ("rcend", "2020-10-01T00:00:00Z"),
+        ("rcend", "2020-10-26T08:35:48Z"),
         ("rclimit", rc_per_batch.to_string().as_str()),
         ("rcprop", "ids|loginfo"),
         ("rctype", "new|edit|log"),
