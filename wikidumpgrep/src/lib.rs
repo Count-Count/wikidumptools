@@ -413,7 +413,7 @@ fn search_dump_reader<B: BufRead>(
                                         stdout_buffer.clear();
                                     }
                                 } else {
-                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, &re)?;
+                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, &re);
                                     stdout_writer.print(&stdout_buffer).unwrap();
                                     stdout_buffer.clear();
                                 }
@@ -436,7 +436,7 @@ fn search_dump_reader<B: BufRead>(
 }
 
 #[inline(always)]
-fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str, re: &Regex) -> Result<()> {
+fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str, re: &Regex) {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
@@ -506,7 +506,6 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
         // separate from next match
         writeln!(buffer).unwrap();
     }
-    Ok(())
 }
 
 pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
@@ -589,40 +588,35 @@ mod tests {
             "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("Abc").build().unwrap(),
-        )
-        .unwrap();
+        );
         find_in_text(
             &mut stdout_buffer,
             "title",
             "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
             &RegexBuilder::new("^").build().unwrap(),
-        )
-        .unwrap();
+        );
         find_in_text(
             &mut stdout_buffer,
             "title",
             "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("Xyz\n").build().unwrap(),
-        )
-        .unwrap();
+        );
         find_in_text(
             &mut stdout_buffer,
             "title",
             "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("\n").build().unwrap(),
-        )
-        .unwrap();
+        );
         find_in_text(
             &mut stdout_buffer,
             "title",
             "revision_id",
             "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
             &RegexBuilder::new("123").build().unwrap(),
-        )
-        .unwrap();
+        );
         stdout_writer.print(&stdout_buffer).unwrap();
     }
 }
