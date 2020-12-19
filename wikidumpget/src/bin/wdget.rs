@@ -6,6 +6,7 @@
 
 use clap::{App, AppSettings, Arg};
 use fs::remove_file;
+use regex::RegexBuilder;
 use reqwest::Client;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
@@ -51,7 +52,7 @@ struct Wiki {
     name: String,
 }
 
-async fn get_available_wikis_from_wikidata() -> Result<Vec<Wiki>> {
+async fn get_available_wikis_from_wikidata(client: &Client) -> Result<Vec<Wiki>> {
     let mut wikis = Vec::with_capacity(50);
     let sparql_url = "https://query.wikidata.org/sparql";
     let query = r#"
@@ -62,7 +63,6 @@ async fn get_available_wikis_from_wikidata() -> Result<Vec<Wiki>> {
     }
     "#;
     let blacklist = ["ecwikimedia", "labswiki", "labtestwiki", "ukwikiversity"];
-    let client = create_client()?;
     let r = client
         .get(sparql_url)
         .query(&[("format", "json"), ("query", query.trim())])
@@ -91,11 +91,19 @@ async fn get_available_wikis_from_wikidata() -> Result<Vec<Wiki>> {
     Ok(wikis)
 }
 
-async fn list_wikis() -> Result<()> {
-    let mut wikis = get_available_wikis_from_wikidata().await?;
+async fn list_wikis(client: &Client) -> Result<()> {
+    let mut wikis = get_available_wikis_from_wikidata(client).await?;
     wikis.sort_unstable_by(|e1, e2| e1.id.cmp(&e2.id));
     for ref wiki in wikis {
         println!("{} - {}", wiki.id.as_str(), wiki.name.as_str());
+    }
+    Ok(())
+}
+
+async fn list_dates(client: &Client, wiki: &str) -> Result<()> {
+    let dates = get_available_dates(client, wiki).await?;
+    for date in dates {
+        println!("{}", date);
     }
     Ok(())
 }
@@ -131,16 +139,15 @@ struct DumpFileInfo {
     md5: Option<String>,
 }
 
-async fn get_dump_status(wiki: &str, date: &str) -> Result<DumpStatus> {
-    let client = create_client()?;
+async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<DumpStatus> {
     let url = format!("https://dumps.wikimedia.org/{}/{}/dumpstatus.json", wiki, date);
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
     let body = r.text().await?;
     Ok(serde_json::from_str(body.as_str())?)
 }
 
-async fn list_types(wiki: &str, date: &str) -> Result<()> {
-    let dump_status = get_dump_status(wiki, date).await?;
+async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
+    let dump_status = get_dump_status(client, wiki, date).await?;
     for (job_name, job_info) in &dump_status.jobs {
         if let Some(files) = &job_info.files {
             let sum = files.values().map(|info| info.size.unwrap_or(0)).sum::<u64>();
@@ -339,6 +346,7 @@ fn check_existing_file(filename: &str, file_data: &DumpFileInfo, verbose: bool) 
 }
 
 async fn download(
+    client: &Client,
     wiki: &str,
     date: &str,
     dump_type: &str,
@@ -347,14 +355,13 @@ async fn download(
     keep_partial: bool,
     resume_partial: bool,
 ) -> Result<()> {
-    let dump_status = get_dump_status(wiki, date).await?;
+    let dump_status = get_dump_status(client, wiki, date).await?;
     let job_info = dump_status.jobs.get(dump_type).ok_or(WDGetError::DumpTypeNotFound())?;
     if &job_info.status != "done" {
         return Err(WDGetError::DumpNotComplete());
     }
     let files = job_info.files.as_ref().ok_or(WDGetError::DumpHasNoFiles())?;
     let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
-    let client = create_client()?;
     for (filename, file_data) in files {
         if Path::new(&filename).exists() {
             check_existing_file(&filename, &file_data, verbose)?;
@@ -401,6 +408,23 @@ async fn download(
         download_res?;
     }
     Ok(())
+}
+
+async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>> {
+    let url = format!("https://dumps.wikimedia.org/{}/", wiki);
+    let r = client.get(url.as_str()).send().await?.error_for_status()?;
+    let re = RegexBuilder::new(r#"<a href="([1-9][0-9]{7})/">([1-9][0-9]{7})/</a>"#)
+        .build()
+        .expect("Error parsing dump date regex");
+    let body = r.text().await?;
+    let mut dates = Vec::with_capacity(10);
+    for cap in re.captures_iter(&body) {
+        if cap[1] == cap[2] {
+            dates.push(cap[1].to_owned());
+        }
+    }
+    dates.sort_unstable();
+    Ok(dates)
 }
 
 struct WikiCredentials<'a> {
@@ -497,7 +521,7 @@ async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
 async fn run() -> Result<()> {
     let wiki_name_arg = Arg::new("wiki name").about("Name of the wiki").required(true);
     let dump_date_arg = Arg::new("dump date")
-        .about("Date of the dump (YYYYMMDD)")
+        .about("Date of the dump (YYYYMMDD or 'latest')")
         .required(true);
 
     let matches = App::new("wikidumget")
@@ -547,13 +571,20 @@ async fn run() -> Result<()> {
     } else {
         ColorChoice::Never
     };
+    let client = create_client()?;
     match matches.subcommand_name().unwrap() {
-        "list-wikis" => list_wikis().await?,
-        "list-dates" => todo!(),
+        "list-wikis" => list_wikis(&client).await?,
+        "list-dates" => {
+            // todo: check args
+            let subcommand_matches = matches.subcommand_matches("list-dates").unwrap();
+            list_dates(&client, subcommand_matches.value_of("wiki name").unwrap()).await?;
+        }
+
         "list-types" => {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("list-types").unwrap();
             list_types(
+                &client,
                 subcommand_matches.value_of("wiki name").unwrap(),
                 subcommand_matches.value_of("dump date").unwrap(),
             )
@@ -563,6 +594,7 @@ async fn run() -> Result<()> {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("download").unwrap();
             download(
+                &client,
                 subcommand_matches.value_of("wiki name").unwrap(),
                 subcommand_matches.value_of("dump date").unwrap(),
                 subcommand_matches.value_of("dump type").unwrap(),
