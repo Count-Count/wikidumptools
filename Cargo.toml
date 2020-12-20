@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "wikidumpget",
-    "wikidumpgrep",
+    "wdget",
+    "wdgrep",
     "spikes/update"
     ]
