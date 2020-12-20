@@ -438,16 +438,34 @@ async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>>
     Ok(dates)
 }
 
-async fn check_date_may_retrieve_latest(client: &Client, wiki: &str, date_spec: &str) -> Result<String> {
+async fn check_date_may_retrieve_latest(
+    client: &Client,
+    wiki: &str,
+    date_spec: &str,
+    dump_type: Option<&str>,
+) -> Result<String> {
     if date_spec == "latest" {
         let mut available_dates = get_available_dates(client, wiki).await?;
         available_dates.reverse();
         for date in available_dates.iter() {
             let res = get_dump_status(client, wiki, date).await;
-            if let Err(WDGetError::DumpStatusFileNotFound()) = res {
-                continue;
+            match res {
+                Ok(dump_status) => {
+                    if let Some(dump_type) = dump_type {
+                        if dump_status
+                            .jobs
+                            .get(dump_type)
+                            .map_or(false, |job| job.status == "done")
+                        {
+                            return Ok(date.to_owned());
+                        }
+                    } else {
+                        return Ok(date.to_owned());
+                    }
+                }
+                Err(WDGetError::DumpStatusFileNotFound()) => continue,
+                Err(e) => return Err(e),
             }
-            return res.map(|_| date.to_owned());
         }
         return Err(WDGetError::NoDumpDatesFound());
     } else {
@@ -530,7 +548,7 @@ async fn run() -> Result<()> {
             let subcommand_matches = matches.subcommand_matches("list-dumps").unwrap();
             let wiki = subcommand_matches.value_of("wiki name").unwrap();
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
-            let date = check_date_may_retrieve_latest(&client, wiki, date_spec).await?;
+            let date = check_date_may_retrieve_latest(&client, wiki, date_spec, None).await?;
             eprintln!("Listing dumps for {}, dump run from {}", wiki, date);
             list_types(&client, wiki, &date).await?
         }
@@ -540,12 +558,13 @@ async fn run() -> Result<()> {
             let subcommand_matches = matches.subcommand_matches("download").unwrap();
             let wiki = subcommand_matches.value_of("wiki name").unwrap();
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
-            let date = check_date_may_retrieve_latest(&client, wiki, date_spec).await?;
+            let dump_type = subcommand_matches.value_of("dump type").unwrap();
+            let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
             download(
                 &client,
                 wiki,
                 &date,
-                subcommand_matches.value_of("dump type").unwrap(),
+                dump_type,
                 subcommand_matches.value_of("mirror"),
                 matches.is_present("verbose"),
                 false,
