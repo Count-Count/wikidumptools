@@ -405,6 +405,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
+name = "dump-update-spike"
+version = "0.1.0"
+dependencies = [
+ "mediawiki",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2281,7 +2290,6 @@ version = "0.1.0"
 dependencies = [
  "atty",
  "clap 3.0.0-beta.2",
- "mediawiki",
  "regex",
  "reqwest",
  "serde 1.0.118",
