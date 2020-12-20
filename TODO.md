@@ -27,25 +27,26 @@
 - progress display
 
 ## wdget
-- list available dumps dates
-- "latest" as date
 - mirror list/shortcut
 - two-line progress text to avoid terminal overflow at normal widths
+- progress: show ETA?
 - list-types: also show #files, total size, description as table
 - show list-wikis as table
 - supress progress with --no-progress or --quiet instead of !-verbose, only show progress with tty
+- print downloaded files in quiet mode?
 
 - use anyhow for errors?
-- verify sha1 checksums while dl'ing only with --verify option
+- verify sha1 checksums while dl'ing (only with --verify option)
 - colorize (+clap colorize)
-- option to unpack while dl'ing?
-- extract bz2 files while dl'ing
+- option to extract .gz/bz2/.xz while dl'ing?
 - --overwrite (--force ?)
 - --resume-partial/--keep-partial
 - automatically try again if intermittent network issue?
 - verify (given files) subcommand
-- --target-dir
+- --target-dir/-t
+- tests?
 
 ## further ideas:
 - wdcat, wdls
 - better error handling
+- load data in clickhouse spike
