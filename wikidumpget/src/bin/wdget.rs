@@ -554,7 +554,8 @@ async fn run() -> Result<()> {
         .subcommand(
             App::new("list-dates")
                 .about("List all dump dates available for this wiki")
-                .arg(wiki_name_arg.clone()),
+                .arg(wiki_name_arg.clone())
+                .arg(Arg::new("dump type").about("Type of the dump").required(false)),
         )
         .subcommand(
             App::new("list-types")
@@ -574,14 +575,15 @@ async fn run() -> Result<()> {
     let client = create_client()?;
     match matches.subcommand_name().unwrap() {
         "list-wikis" => list_wikis(&client).await?,
+
         "list-dates" => {
-            // todo: check args
+            // todo: check args: wiki name, handle optional type, handle not one dump found condition,
             let subcommand_matches = matches.subcommand_matches("list-dates").unwrap();
             list_dates(&client, subcommand_matches.value_of("wiki name").unwrap()).await?;
         }
 
         "list-types" => {
-            // todo: check args
+            // todo: check args: wiki name, dump date format; handle not found, handle latest
             let subcommand_matches = matches.subcommand_matches("list-types").unwrap();
             list_types(
                 &client,
@@ -590,6 +592,7 @@ async fn run() -> Result<()> {
             )
             .await?
         }
+
         "download" => {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("download").unwrap();
@@ -605,6 +608,7 @@ async fn run() -> Result<()> {
             )
             .await?
         }
+
         "update" => {
             update(None).await?;
         }
