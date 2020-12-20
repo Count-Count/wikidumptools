@@ -16,6 +16,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
+use std::process;
 use std::time::Instant;
 use termcolor::ColorChoice;
 use tokio::time;
@@ -579,5 +580,9 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-    run().await.unwrap();
+    let res = run().await;
+    if let Err(e) = res {
+        eprintln!("{}", e);
+        process::exit(1);
+    }
 }
