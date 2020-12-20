@@ -6,7 +6,8 @@
 
 use clap::{App, AppSettings, Arg};
 use fs::remove_file;
-use regex::RegexBuilder;
+use lazy_static::lazy_static;
+use regex::Regex;
 use reqwest::Client;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
@@ -33,6 +34,10 @@ enum WDGetError {
     DumpNotComplete(),
     #[error("Dump does not contain any files")]
     DumpHasNoFiles(),
+    #[error("No dumps found")]
+    NoDumpDatesFound(),
+    #[error("Specified date is invalid, must be YYYYMMDD or 'latest'")]
+    InvalidDumpDate(),
     #[error("Error accessing file {0} - {1}")]
     DumpFileAccessError(String, String),
     #[error("Aborted by user")]
@@ -407,18 +412,37 @@ async fn download(
 async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>> {
     let url = format!("https://dumps.wikimedia.org/{}/", wiki);
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
-    let re = RegexBuilder::new(r#"<a href="([1-9][0-9]{7})/">([1-9][0-9]{7})/</a>"#)
-        .build()
-        .expect("Error parsing dump date regex");
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"<a href="([1-9][0-9]{7})/">([1-9][0-9]{7})/</a>"#)
+            .expect("Error parsing HTML dump date regex");
+    }
     let body = r.text().await?;
     let mut dates = Vec::with_capacity(10);
-    for cap in re.captures_iter(&body) {
+    for cap in RE.captures_iter(&body) {
         if cap[1] == cap[2] {
             dates.push(cap[1].to_owned());
         }
     }
+    if dates.is_empty() {
+        return Err(WDGetError::NoDumpDatesFound());
+    }
     dates.sort_unstable();
     Ok(dates)
+}
+
+async fn check_date_may_retrieve_latest(client: &Client, wiki: &str, date_spec: &str) -> Result<String> {
+    if date_spec == "latest" {
+        Ok(get_available_dates(client, wiki).await?.last().unwrap().to_owned())
+    } else {
+        lazy_static! {
+            static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex");
+        }
+        if RE.is_match(date_spec) {
+            Ok(date_spec.to_owned())
+        } else {
+            return Err(WDGetError::InvalidDumpDate());
+        }
+    }
 }
 
 async fn run() -> Result<()> {
@@ -461,8 +485,8 @@ async fn run() -> Result<()> {
                 .arg(Arg::new("dump type").about("Type of the dump").required(false)),
         )
         .subcommand(
-            App::new("list-types")
-                .about("List all types available in this dump")
+            App::new("list-dumps")
+                .about("List all dumps available for this wiki at this date")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg),
         )
@@ -479,29 +503,31 @@ async fn run() -> Result<()> {
         "list-wikis" => list_wikis(&client).await?,
 
         "list-dates" => {
-            // todo: check args: wiki name, handle optional type, handle not one dump found condition,
+            // todo: check args: wiki name, handle optional type, handle no dump found condition,
             let subcommand_matches = matches.subcommand_matches("list-dates").unwrap();
             list_dates(&client, subcommand_matches.value_of("wiki name").unwrap()).await?;
         }
 
-        "list-types" => {
-            // todo: check args: wiki name, dump date format; handle not found, handle latest
-            let subcommand_matches = matches.subcommand_matches("list-types").unwrap();
-            list_types(
-                &client,
-                subcommand_matches.value_of("wiki name").unwrap(),
-                subcommand_matches.value_of("dump date").unwrap(),
-            )
-            .await?
+        "list-dumps" => {
+            // todo: check args: wiki name; handle wiki/date not found
+            let subcommand_matches = matches.subcommand_matches("list-dumps").unwrap();
+            let wiki = subcommand_matches.value_of("wiki name").unwrap();
+            let date_spec = subcommand_matches.value_of("dump date").unwrap();
+            let date = check_date_may_retrieve_latest(&client, wiki, date_spec).await?;
+            eprintln!("Listing dumps for {}, dump run from {}", wiki, date);
+            list_types(&client, wiki, &date).await?
         }
 
         "download" => {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("download").unwrap();
+            let wiki = subcommand_matches.value_of("wiki name").unwrap();
+            let date_spec = subcommand_matches.value_of("dump date").unwrap();
+            let date = check_date_may_retrieve_latest(&client, wiki, date_spec).await?;
             download(
                 &client,
-                subcommand_matches.value_of("wiki name").unwrap(),
-                subcommand_matches.value_of("dump date").unwrap(),
+                wiki,
+                &date,
                 subcommand_matches.value_of("dump type").unwrap(),
                 subcommand_matches.value_of("mirror"),
                 matches.is_present("verbose"),
