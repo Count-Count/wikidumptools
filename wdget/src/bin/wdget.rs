@@ -8,7 +8,7 @@ use clap::{App, AppSettings, Arg};
 use fs::remove_file;
 use lazy_static::lazy_static;
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
@@ -33,6 +33,8 @@ enum WDGetError {
     #[error("Dump is still in progress")]
     DumpNotComplete(),
     #[error("Dump does not contain any files")]
+    DumpStatusFileNotFound(),
+    #[error("Dump status file not found")]
     DumpHasNoFiles(),
     #[error("No dumps found")]
     NoDumpDatesFound(),
@@ -140,7 +142,13 @@ struct DumpFileInfo {
 
 async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<DumpStatus> {
     let url = format!("https://dumps.wikimedia.org/{}/{}/dumpstatus.json", wiki, date);
-    let r = client.get(url.as_str()).send().await?.error_for_status()?;
+    let r = client.get(url.as_str()).send().await?.error_for_status().map_err(|e| {
+        if let Some(StatusCode::NOT_FOUND) = e.status() {
+            WDGetError::DumpStatusFileNotFound()
+        } else {
+            WDGetError::from(e)
+        }
+    })?;
     let body = r.text().await?;
     Ok(serde_json::from_str(body.as_str())?)
 }
@@ -509,7 +517,7 @@ async fn run() -> Result<()> {
         }
 
         "list-dumps" => {
-            // todo: check args: wiki name; handle wiki/date not found
+            // todo: check args: wiki name; handle wiki/date not found, dump status file does not exist (yet)
             let subcommand_matches = matches.subcommand_matches("list-dumps").unwrap();
             let wiki = subcommand_matches.value_of("wiki name").unwrap();
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
