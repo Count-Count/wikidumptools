@@ -440,7 +440,16 @@ async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>>
 
 async fn check_date_may_retrieve_latest(client: &Client, wiki: &str, date_spec: &str) -> Result<String> {
     if date_spec == "latest" {
-        Ok(get_available_dates(client, wiki).await?.last().unwrap().to_owned())
+        let mut available_dates = get_available_dates(client, wiki).await?;
+        available_dates.reverse();
+        for date in available_dates.iter() {
+            let res = get_dump_status(client, wiki, date).await;
+            if let Err(WDGetError::DumpStatusFileNotFound()) = res {
+                continue;
+            }
+            return res.map(|_| date.to_owned());
+        }
+        return Err(WDGetError::NoDumpDatesFound());
     } else {
         lazy_static! {
             static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex");
