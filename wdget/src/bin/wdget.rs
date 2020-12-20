@@ -36,7 +36,7 @@ enum WDGetError {
     DumpStatusFileNotFound(),
     #[error("Dump status file not found")]
     DumpHasNoFiles(),
-    #[error("No dumps found")]
+    #[error("No dump runs found")]
     NoDumpDatesFound(),
     #[error("Specified date is invalid, must be YYYYMMDD or 'latest'")]
     InvalidDumpDate(),
