@@ -1,0 +1,16 @@
+[package]
+name = "clickhouse-ingest"
+version = "0.1.0"
+authors = ["Count Count <countvoncount123456@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+#clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", branch = "async-await" }
+clickhouse-rs = { path = "../../../clickhouse-rs", version = "0.2.0-alpha.5" }
+quick-xml = "0.20"
+tokio = { version = "0.2", features = ["full"] }
+env_logger = "0.7"
+chrono = "0.4"
+chrono-tz = "0.5" 

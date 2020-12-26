@@ -5,3 +5,7 @@ members = [
     "wdgrep",
     "spikes/update"
     ]
+
+exclude = [
+    "spikes/clickhouse-ingest"
+]
