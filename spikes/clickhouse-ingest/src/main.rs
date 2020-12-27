@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use chrono_tz::Tz;
 use clickhouse_rs::{row, types::Block, Pool};
-use std::env;
+//use std::env;
 use std::error::Error;
 
 #[tokio::main]
