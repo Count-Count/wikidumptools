@@ -100,6 +100,7 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs"
 version = "0.2.0-alpha.5"
+source = "git+https://github.com/Count-Count/clickhouse-rs.git?rev=4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a#4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a"
 dependencies = [
  "byteorder",
  "chrono",
@@ -124,6 +125,7 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs-cityhash-sys"
 version = "0.1.2"
+source = "git+https://github.com/Count-Count/clickhouse-rs.git?rev=4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a#4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a"
 dependencies = [
  "cc",
 ]
