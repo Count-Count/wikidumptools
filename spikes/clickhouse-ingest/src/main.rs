@@ -6,14 +6,13 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let database_url = "tcp://localhost:9000/dewiki?compression=lz4";
+    let database_url = "tcp://localhost:9000/?compression=lz4";
 
     // env::set_var("RUST_LOG", "clickhouse_rs=debug");
     // env_logger::init();
 
-    let delete_stmt = "DROP TABLE IF exists revision";
     let create_stmt = "
-    CREATE TABLE revision 
+    CREATE TABLE dewiki.revision
     (
         pageid UInt32 CODEC(Delta, ZSTD),
         namespace Int8 CODEC(Delta, ZSTD),
@@ -38,7 +37,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     ";
     let pool = Pool::new(database_url);
     let mut client = pool.get_handle().await?;
-    client.execute(delete_stmt).await?;
+    client.execute("CREATE DATABASE IF NOT EXISTS dewiki").await?;
+    client.execute("DROP TABLE IF EXISTS dewiki.revision").await?;
     client.execute(create_stmt).await?;
     let mut block = Block::with_capacity(5);
 
@@ -54,6 +54,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ipv4: "127.0.0.1",
         ipv6: "2001:4CA0:6FFF:3:0:0:0:17"
     })?;
-    client.insert("revision", block).await?;
+    client.insert("dewiki.revision", block).await?;
     Ok(())
 }
