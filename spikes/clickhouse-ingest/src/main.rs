@@ -224,5 +224,8 @@ async fn main() -> Result<()> {
             block = Block::with_capacity(100);
         }
     }
+    if record_count > 0 {
+        client.insert("dewiki.revision", block).await?;
+    }
     Ok(())
 }
