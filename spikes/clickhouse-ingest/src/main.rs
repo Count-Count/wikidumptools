@@ -253,6 +253,8 @@ fn read_text_in_tag<T: BufRead>(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let dry_run = env::args().into_iter().nth(1).map_or(false, |arg| arg == "-n");
+
     let database_url = "tcp://localhost:9000/?compression=lz4";
 
     // env::set_var("RUST_LOG", "clickhouse_rs=debug");
@@ -284,9 +286,11 @@ async fn main() -> Result<()> {
     ";
     let pool = Pool::new(database_url);
     let mut client = pool.get_handle().await?;
-    client.execute("CREATE DATABASE IF NOT EXISTS dewiki").await?;
-    client.execute("DROP TABLE IF EXISTS dewiki.revision").await?;
-    client.execute(create_stmt).await?;
+    if !dry_run {
+        client.execute("CREATE DATABASE IF NOT EXISTS dewiki").await?;
+        client.execute("DROP TABLE IF EXISTS dewiki.revision").await?;
+        client.execute(create_stmt).await?;
+    }
 
     let ts = DateTime::parse_from_rfc3339("2001-05-31T08:19:59Z")
         .unwrap()
@@ -318,10 +322,17 @@ async fn main() -> Result<()> {
         let mut block = Block::with_capacity(100);
         let page = Page::deserialize(&mut deserializer).unwrap();
         // println!("Revisions: {}", page.revisions.len());
-        for revision in page.revisions {
+        for revision in page.revisions.iter() {
             let timestamp = DateTime::parse_from_rfc3339(revision.timestamp.as_ref())
                 .unwrap()
                 .with_timezone(&Tz::Zulu);
+
+            let mut comment = "";
+            if let Some(ref rev_comment) = revision.comment {
+                if let Some(ref rev_comment_text) = rev_comment.comment {
+                    comment = rev_comment_text.as_str();
+                }
+            }
 
             block.push(row! {
                 pageid: page.id,
@@ -329,21 +340,25 @@ async fn main() -> Result<()> {
                 title: page.title.as_str(),
                 id: revision.id,
                 timestamp: timestamp,
-                comment: revision.comment.map_or("".to_owned(), |comment| {comment.comment.unwrap_or_else(||  {"".to_owned()})}),
-                model: revision.model,
-                format: revision.format,
-                sha1: revision.sha1
+                comment: comment,
+                model: revision.model.as_str(),
+                format: revision.format.as_str(),
+                sha1: revision.sha1.as_str()
             })?;
             total_record_count += 1;
             record_count += 1;
             if record_count == 100 {
-                client.insert("dewiki.revision", block).await?;
+                if !dry_run {
+                    client.insert("dewiki.revision", block).await?;
+                }
                 record_count = 0;
                 block = Block::with_capacity(100);
             }
         }
         if record_count > 0 {
-            client.insert("dewiki.revision", block).await?;
+            if !dry_run {
+                client.insert("dewiki.revision", block).await?;
+            }
         }
     }
     // if total_record_count == 10000 {
