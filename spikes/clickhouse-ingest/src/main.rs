@@ -8,6 +8,7 @@ use quick_xml::de::{from_str, DeError, Deserializer};
 use quick_xml::{events::Event, Reader};
 use serde::Deserialize;
 use std::io::{BufRead, BufReader};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use std::str::from_utf8;
 use std::{env, path::Path};
@@ -74,37 +75,6 @@ struct Redirect {
     title: String,
 }
 
-enum SkipToStartTagOrEofResult {
-    StartTagFound,
-    EOF,
-}
-
-#[inline(always)]
-fn skip_to_start_tag_or_eof<T: BufRead>(
-    reader: &mut Reader<T>,
-    buf: &mut Vec<u8>,
-    tag_name: &[u8],
-) -> Result<SkipToStartTagOrEofResult> {
-    loop {
-        match reader.read_event(buf)? {
-            Event::Start(ref e) if e.name() == tag_name => {
-                return Ok(SkipToStartTagOrEofResult::StartTagFound);
-            }
-            Event::Empty(ref e) if e.name() == tag_name => {
-                return Err(anyhow!(
-                    "Expected start tag <{}>, got empty tag",
-                    from_utf8(tag_name)?.to_owned()
-                ));
-            }
-            Event::Eof => {
-                return Ok(SkipToStartTagOrEofResult::EOF);
-            }
-            _other_event => {}
-        }
-        buf.clear();
-    }
-}
-
 #[inline(always)]
 fn skip_to_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
     loop {
@@ -122,133 +92,6 @@ fn skip_to_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_na
         }
         buf.clear();
     }
-}
-
-#[inline(always)]
-fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
-    if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(reader, buf, tag_name)? {
-        return Err(anyhow!(
-            "Expected start tag <{}>, got EOF",
-            from_utf8(tag_name)?.to_owned()
-        ));
-    }
-    Ok(())
-}
-
-fn read_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
-    match reader.read_event(buf)? {
-        Event::Start(ref e) if e.name() == tag_name => {
-            buf.clear();
-            Ok(())
-        }
-        Event::Text(escaped_text) => {
-            if escaped_text.iter().all(|c| c.is_ascii_whitespace()) {
-                buf.clear();
-                read_start_tag(reader, buf, tag_name)
-            } else {
-                let e = Err(anyhow!(
-                    "Expected start tag </{}> or whitespace text, got text '{}'",
-                    from_utf8(tag_name)?.to_owned(),
-                    from_utf8(&escaped_text)?.to_owned()
-                ));
-                buf.clear();
-                e
-            }
-        }
-        other_event => {
-            let e = Err(anyhow!(
-                "Expected start tag <{}> or whitespace text, got event '{:?}'",
-                from_utf8(tag_name)?.to_owned(),
-                other_event
-            ));
-            buf.clear();
-            e
-        }
-    }
-}
-
-fn read_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
-    match reader.read_event(buf)? {
-        Event::End(ref e) if e.name() == tag_name => {
-            buf.clear();
-            Ok(())
-        }
-        Event::Text(escaped_text) => {
-            if escaped_text.iter().all(|c| c.is_ascii_whitespace()) {
-                buf.clear();
-                read_end_tag(reader, buf, tag_name)
-            } else {
-                let e = Err(anyhow!(
-                    "Expected end tag </{}> or whitespace text, got text '{}'",
-                    from_utf8(tag_name)?.to_owned(),
-                    from_utf8(&escaped_text)?.to_owned()
-                ));
-                buf.clear();
-                e
-            }
-        }
-        other_event => {
-            let e = Err(anyhow!(
-                "Expected end tag </{}> or whitespace text, got event '{:?}'",
-                from_utf8(tag_name)?.to_owned(),
-                other_event
-            ));
-            buf.clear();
-            e
-        }
-    }
-}
-
-fn read_text<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, text_buf: &mut String) -> Result<()> {
-    match reader.read_event(buf)? {
-        Event::Text(escaped_text) => {
-            let unescaped_text = escaped_text.unescaped()?;
-            let text = from_utf8(&unescaped_text)?;
-            text_buf.push_str(text);
-            buf.clear();
-            Ok(())
-        }
-        other_event => {
-            let e = Err(anyhow!("Expected text, got event '{:?}'", other_event));
-            buf.clear();
-            e
-        }
-    }
-}
-
-fn skip_whitespace_text<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>) -> Result<()> {
-    match reader.read_event(buf)? {
-        Event::Text(escaped_text) => {
-            if escaped_text.iter().all(|c| c.is_ascii_whitespace()) {
-                buf.clear();
-                Ok(())
-            } else {
-                let e = Err(anyhow!(
-                    "Expected whitespace text, got text '{}'",
-                    from_utf8(&escaped_text)?.to_owned()
-                ));
-                buf.clear();
-                e
-            }
-        }
-        other_event => {
-            let e = Err(anyhow!("Expected whitespace text, got event '{:?}'", other_event));
-            buf.clear();
-            e
-        }
-    }
-}
-
-fn read_text_in_tag<T: BufRead>(
-    reader: &mut Reader<T>,
-    buf: &mut Vec<u8>,
-    tag_name: &[u8],
-    text_buf: &mut String,
-) -> Result<()> {
-    read_start_tag(reader, buf, tag_name)?;
-    read_text(reader, buf, text_buf)?;
-    read_end_tag(reader, buf, tag_name)?;
-    Ok(())
 }
 
 #[tokio::main]
@@ -322,7 +165,7 @@ async fn main() -> Result<()> {
         let mut block = Block::with_capacity(100);
         let page = Page::deserialize(&mut deserializer).unwrap();
         // println!("Revisions: {}", page.revisions.len());
-        for revision in page.revisions.iter() {
+        for revision in page.revisions {
             let timestamp = DateTime::parse_from_rfc3339(revision.timestamp.as_ref())
                 .unwrap()
                 .with_timezone(&Tz::Zulu);
@@ -331,6 +174,19 @@ async fn main() -> Result<()> {
             if let Some(ref rev_comment) = revision.comment {
                 if let Some(ref rev_comment_text) = rev_comment.comment {
                     comment = rev_comment_text.as_str();
+                }
+            }
+            let username = revision.contributor.username.as_deref().unwrap_or("");
+            let userid = revision.contributor.id.unwrap_or(0);
+            let mut ipv4 = "0.0.0.0";
+            let mut ipv6 = "::";
+            if let Some(s) = revision.contributor.ip.as_deref() {
+                if s.contains('.') {
+                    ipv4 = s;
+                } else if s.contains(':') {
+                    ipv6 = s;
+                } else {
+                    return Err(anyhow!("Could not parse IP address '{}'", s.to_owned()));
                 }
             }
 
@@ -343,7 +199,11 @@ async fn main() -> Result<()> {
                 comment: comment,
                 model: revision.model.as_str(),
                 format: revision.format.as_str(),
-                sha1: revision.sha1.as_str()
+                sha1: revision.sha1.as_str(),
+                ipv4: ipv4,
+                ipv6: ipv6,
+                username: username,
+                userid: userid
             })?;
             total_record_count += 1;
             record_count += 1;
