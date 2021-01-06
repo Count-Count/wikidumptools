@@ -16,3 +16,6 @@ tokio = { version = "0.2", features = ["full"] }
 env_logger = "0.7"
 chrono = "0.4"
 chrono-tz = "0.5"
+[dependencies.snmalloc-rs]
+version = "0.2"
+features = [] # stats, debug, ...

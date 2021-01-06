@@ -108,6 +108,7 @@ dependencies = [
  "env_logger",
  "quick-xml",
  "serde",
+ "snmalloc-rs",
  "tokio",
 ]
 
@@ -140,6 +141,15 @@ dependencies = [
 name = "clickhouse-rs-cityhash-sys"
 version = "0.1.2"
 source = "git+https://github.com/Count-Count/clickhouse-rs.git?rev=4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a#4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cmake"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb6210b637171dfba4cda12e579ac6dc73f5165ad56133e5d72ef3131f320855"
 dependencies = [
  "cc",
 ]
@@ -736,6 +746,25 @@ name = "slab"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
+
+[[package]]
+name = "snmalloc-rs"
+version = "0.2.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5332d4b78e7d7a3dfa6c1a0c7d09ca2290f7801d2579e22dc4fb978066a631fe"
+dependencies = [
+ "snmalloc-sys",
+]
+
+[[package]]
+name = "snmalloc-sys"
+version = "0.2.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e08a72a314493ce6a76448bfb2ff826c96724b712f10139dce5db99194664de"
+dependencies = [
+ "cmake",
+ "libc",
+]
 
 [[package]]
 name = "socket2"

@@ -13,6 +13,9 @@ use std::str::from_utf8;
 use std::{env, path::Path};
 use std::{fs::File, time::Instant};
 
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct Page {
