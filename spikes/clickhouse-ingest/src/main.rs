@@ -3,12 +3,73 @@ use anyhow::{Context, Result};
 use chrono::DateTime;
 use chrono_tz::Tz;
 use clickhouse_rs::{row, types::Block, Pool};
+use env::VarError;
+use quick_xml::de::{from_str, DeError, Deserializer};
 use quick_xml::{events::Event, Reader};
+use serde::Deserialize;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::from_utf8;
 use std::{env, path::Path};
 use std::{fs::File, time::Instant};
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Page {
+    title: String,
+    ns: i16,
+    id: u32,
+    redirect: Option<Redirect>,
+    #[serde(rename = "revision", default)]
+    revisions: Vec<Revision>,
+}
+
+// <id>1</id>
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Revision {
+    id: u32,
+    parentid: Option<u32>,
+    contributor: Contributor,
+    timestamp: String,
+    comment: Option<Comment>,
+    model: String,
+    format: String,
+    text: Text,
+    sha1: String,
+    minor: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Comment {
+    #[serde(rename = "$value")]
+    comment: Option<String>,
+    deleted: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Contributor {
+    ip: Option<String>,
+    username: Option<String>,
+    id: Option<u32>,
+    deleted: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Text {
+    bytes: Option<u32>,
+    id: Option<u32>,
+    deleted: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Redirect {
+    title: String,
+}
 
 enum SkipToStartTagOrEofResult {
     StartTagFound,
@@ -34,6 +95,25 @@ fn skip_to_start_tag_or_eof<T: BufRead>(
             }
             Event::Eof => {
                 return Ok(SkipToStartTagOrEofResult::EOF);
+            }
+            _other_event => {}
+        }
+        buf.clear();
+    }
+}
+
+#[inline(always)]
+fn skip_to_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
+    loop {
+        match reader.read_event(buf)? {
+            Event::End(ref e) if e.name() == tag_name => {
+                return Ok(());
+            }
+            Event::Eof => {
+                return Err(anyhow!(
+                    "EOF while looking for end tag </{}>",
+                    from_utf8(tag_name)?.to_owned()
+                ));
             }
             _other_event => {}
         }
@@ -196,7 +276,7 @@ async fn main() -> Result<()> {
         sha1 FixedString(32) CODEC(NONE)
     )
     ENGINE = MergeTree()
-    PARTITION BY toYYYYMM(timestamp)
+--    PARTITION BY toYYYYMM(timestamp)
     PRIMARY KEY (pageid, timestamp)
     ";
     let pool = Pool::new(database_url);
@@ -204,94 +284,71 @@ async fn main() -> Result<()> {
     client.execute("CREATE DATABASE IF NOT EXISTS dewiki").await?;
     client.execute("DROP TABLE IF EXISTS dewiki.revision").await?;
     client.execute(create_stmt).await?;
-    let mut block = Block::with_capacity(100);
 
     let ts = DateTime::parse_from_rfc3339("2001-05-31T08:19:59Z")
         .unwrap()
         .with_timezone(&Tz::Zulu);
 
-    let mut dump_file = PathBuf::from(env::var("HOME")?);
+    let home_dir = env::var("HOME").or_else::<VarError, _>(|_err| {
+        let mut home = env::var("HOMEDRIVE")?;
+        let homepath = env::var("HOMEPATH")?;
+        home.push_str(homepath.as_ref());
+        Ok(home)
+    })?;
+    let mut dump_file = PathBuf::from(home_dir);
     dump_file.push("wpdumps");
     dump_file.push("dewiki-20201201-stub-meta-history.xml");
     let file = File::open(&dump_file)?;
     let file_size = file.metadata().unwrap().len();
-
     let buf_size = 2 * 1024 * 1024;
     let buf_reader = BufReader::with_capacity(buf_size, file);
     let mut reader = Reader::from_reader(buf_reader);
+    // let mut reader = Reader::from_str(test_page);
+    reader.expand_empty_elements(true).check_end_names(true).trim_text(true);
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
-    let mut text: String = String::with_capacity(10000);
-    let mut title: String = String::with_capacity(10000);
+    skip_to_end_tag(&mut reader, &mut buf, b"siteinfo")?;
+    let mut deserializer = Deserializer::new(reader);
     let mut record_count: u32 = 0;
     let mut total_record_count: u32 = 0;
     let now = Instant::now();
-    skip_to_start_tag(&mut reader, &mut buf, b"page")?;
     loop {
-        title.clear();
-        read_text_in_tag(&mut reader, &mut buf, b"title", &mut title)?;
-        text.clear();
-        read_text_in_tag(&mut reader, &mut buf, b"ns", &mut text)?;
-        let ns = text
-            .parse::<i16>()
-            .with_context(|| format!("Failed to parse ns '{}'", text))?;
-        text.clear();
-        read_text_in_tag(&mut reader, &mut buf, b"id", &mut text)?;
-        let id = text
-            .parse::<u32>()
-            .with_context(|| format!("Failed to parse page id '{}'", text))?;
-        skip_whitespace_text(&mut reader, &mut buf);
-        loop {
-            let ev = reader.read_event(&mut buf)?;
-            match ev {
-                Event::Start(e) if e.name() == b"revision" => {}
-                Event::End(e) if e.name() == b"page" => {
-                    break;
-                }
-                _other => {
-                    return Err(anyhow!("Expected next <revision> or </page>"));
-                }
+        let mut block = Block::with_capacity(100);
+        let page = Page::deserialize(&mut deserializer).unwrap();
+        // println!("Revisions: {}", page.revisions.len());
+        for revision in page.revisions {
+            let timestamp = DateTime::parse_from_rfc3339(revision.timestamp.as_ref())
+                .unwrap()
+                .with_timezone(&Tz::Zulu);
+
+            block.push(row! {
+                pageid: page.id,
+                namespace: page.ns,
+                title: page.title.as_str(),
+                id: revision.id,
+                timestamp: timestamp,
+                comment: revision.comment.map_or("".to_owned(), |comment| {comment.comment.unwrap_or_else(||  {"".to_owned()})}),
+                model: revision.model,
+                format: revision.format,
+                sha1: revision.sha1
+            })?;
+            total_record_count += 1;
+            record_count += 1;
+            if record_count == 100 {
+                client.insert("dewiki.revision", block).await?;
+                record_count = 0;
+                block = Block::with_capacity(100);
             }
-            read_start_tag(&mut reader, &mut buf, b"revision")?;
-
-            // <id>2</id>
-            // <parentid>1</parentid>
-            // <timestamp>2001-05-31T08:19:59Z</timestamp>
-            // <contributor>
-            //   <username>bln2-t1-1.mcbone.net</username>
-            //   <id>0</id>
-            // </contributor>
-            // <minor/>
-            // <comment>*</comment>
-            // <model>wikitext</model>
-            // <format>text/x-wiki</format>
-            // <text bytes="259" id="2" />
-            // <sha1>h4lbukbdkfsg7nhrm82qz4h3mqyejeg</sha1>
-            read_end_tag(&mut reader, &mut buf, b"revision")?;
         }
-        block.push(row! {
-            pageid: id,
-            namespace: ns,
-            title: title.clone(),
-        })?;
-        total_record_count += 1;
-        record_count += 1;
-        if record_count == 100 {
+        if record_count > 0 {
             client.insert("dewiki.revision", block).await?;
-            record_count = 0;
-            block = Block::with_capacity(100);
-        }
-        if total_record_count == 10000 {
-            break;
-        }
-
-        // TBD: don't skip here
-        if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(&mut reader, &mut buf, b"page")? {
-            break;
         }
     }
-    if record_count > 0 {
-        client.insert("dewiki.revision", block).await?;
-    }
+    // if total_record_count == 10000 {
+    //     break;
+    // }
+    // if record_count > 0 {
+    //     client.insert("dewiki.revision", block).await?;
+    // }
     let mib_read = file_size as f64 / 1024.0 / 1024.0;
     let elapsed_seconds = now.elapsed().as_secs_f64();
 
