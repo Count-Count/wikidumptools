@@ -10,7 +10,8 @@ edition = "2018"
 anyhow = "1.0"
 clickhouse-rs = { git = "https://github.com/Count-Count/clickhouse-rs.git", rev = "4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a" }
 #clickhouse-rs = { path = "../../../clickhouse-rs", version = "0.2.0-alpha.5" }
-quick-xml = "0.20"
+serde = { version = "1.0", features = [ "derive" ] }
+quick-xml = { version = "0.20", features = [ "serialize" ] }
 tokio = { version = "0.2", features = ["full"] }
 env_logger = "0.7"
 chrono = "0.4"

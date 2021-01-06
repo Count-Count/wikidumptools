@@ -4,11 +4,11 @@ use chrono::DateTime;
 use chrono_tz::Tz;
 use clickhouse_rs::{row, types::Block, Pool};
 use quick_xml::{events::Event, Reader};
-use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::from_utf8;
 use std::{env, path::Path};
+use std::{fs::File, time::Instant};
 
 enum SkipToStartTagOrEofResult {
     StartTagFound,
@@ -58,9 +58,23 @@ fn read_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_nam
             buf.clear();
             Ok(())
         }
+        Event::Text(escaped_text) => {
+            if escaped_text.iter().all(|c| c.is_ascii_whitespace()) {
+                buf.clear();
+                read_start_tag(reader, buf, tag_name)
+            } else {
+                let e = Err(anyhow!(
+                    "Expected start tag </{}> or whitespace text, got text '{}'",
+                    from_utf8(tag_name)?.to_owned(),
+                    from_utf8(&escaped_text)?.to_owned()
+                ));
+                buf.clear();
+                e
+            }
+        }
         other_event => {
             let e = Err(anyhow!(
-                "Expected start tag <{}>, got event '{:?}'",
+                "Expected start tag <{}> or whitespace text, got event '{:?}'",
                 from_utf8(tag_name)?.to_owned(),
                 other_event
             ));
@@ -76,9 +90,23 @@ fn read_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name:
             buf.clear();
             Ok(())
         }
+        Event::Text(escaped_text) => {
+            if escaped_text.iter().all(|c| c.is_ascii_whitespace()) {
+                buf.clear();
+                read_end_tag(reader, buf, tag_name)
+            } else {
+                let e = Err(anyhow!(
+                    "Expected end tag </{}> or whitespace text, got text '{}'",
+                    from_utf8(tag_name)?.to_owned(),
+                    from_utf8(&escaped_text)?.to_owned()
+                ));
+                buf.clear();
+                e
+            }
+        }
         other_event => {
             let e = Err(anyhow!(
-                "Expected end tag </{}>, got event '{:?}'",
+                "Expected end tag </{}> or whitespace text, got event '{:?}'",
                 from_utf8(tag_name)?.to_owned(),
                 other_event
             ));
@@ -186,6 +214,8 @@ async fn main() -> Result<()> {
     dump_file.push("wpdumps");
     dump_file.push("dewiki-20201201-stub-meta-history.xml");
     let file = File::open(&dump_file)?;
+    let file_size = file.metadata().unwrap().len();
+
     let buf_size = 2 * 1024 * 1024;
     let buf_reader = BufReader::with_capacity(buf_size, file);
     let mut reader = Reader::from_reader(buf_reader);
@@ -193,39 +223,81 @@ async fn main() -> Result<()> {
     let mut text: String = String::with_capacity(10000);
     let mut title: String = String::with_capacity(10000);
     let mut record_count: u32 = 0;
+    let mut total_record_count: u32 = 0;
+    let now = Instant::now();
+    skip_to_start_tag(&mut reader, &mut buf, b"page")?;
     loop {
-        if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(&mut reader, &mut buf, b"page")? {
-            break;
-        }
-        skip_whitespace_text(&mut reader, &mut buf)?;
         title.clear();
         read_text_in_tag(&mut reader, &mut buf, b"title", &mut title)?;
         text.clear();
-        skip_whitespace_text(&mut reader, &mut buf)?;
         read_text_in_tag(&mut reader, &mut buf, b"ns", &mut text)?;
         let ns = text
             .parse::<i16>()
             .with_context(|| format!("Failed to parse ns '{}'", text))?;
         text.clear();
-        skip_whitespace_text(&mut reader, &mut buf)?;
         read_text_in_tag(&mut reader, &mut buf, b"id", &mut text)?;
         let id = text
             .parse::<u32>()
             .with_context(|| format!("Failed to parse page id '{}'", text))?;
+        skip_whitespace_text(&mut reader, &mut buf);
+        loop {
+            let ev = reader.read_event(&mut buf)?;
+            match ev {
+                Event::Start(e) if e.name() == b"revision" => {}
+                Event::End(e) if e.name() == b"page" => {
+                    break;
+                }
+                _other => {
+                    return Err(anyhow!("Expected next <revision> or </page>"));
+                }
+            }
+            read_start_tag(&mut reader, &mut buf, b"revision")?;
+
+            // <id>2</id>
+            // <parentid>1</parentid>
+            // <timestamp>2001-05-31T08:19:59Z</timestamp>
+            // <contributor>
+            //   <username>bln2-t1-1.mcbone.net</username>
+            //   <id>0</id>
+            // </contributor>
+            // <minor/>
+            // <comment>*</comment>
+            // <model>wikitext</model>
+            // <format>text/x-wiki</format>
+            // <text bytes="259" id="2" />
+            // <sha1>h4lbukbdkfsg7nhrm82qz4h3mqyejeg</sha1>
+            read_end_tag(&mut reader, &mut buf, b"revision")?;
+        }
         block.push(row! {
             pageid: id,
             namespace: ns,
             title: title.clone(),
         })?;
+        total_record_count += 1;
         record_count += 1;
         if record_count == 100 {
             client.insert("dewiki.revision", block).await?;
             record_count = 0;
             block = Block::with_capacity(100);
         }
+        if total_record_count == 10000 {
+            break;
+        }
+
+        // TBD: don't skip here
+        if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(&mut reader, &mut buf, b"page")? {
+            break;
+        }
     }
     if record_count > 0 {
         client.insert("dewiki.revision", block).await?;
     }
+    let mib_read = file_size as f64 / 1024.0 / 1024.0;
+    let elapsed_seconds = now.elapsed().as_secs_f64();
+
+    eprintln!(
+        "Read {} revisions ({:.2} MiB) in {:.2} seconds.",
+        total_record_count, mib_read, elapsed_seconds,
+    );
     Ok(())
 }
