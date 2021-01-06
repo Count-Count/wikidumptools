@@ -1,17 +1,16 @@
 use anyhow::anyhow;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::DateTime;
 use chrono_tz::Tz;
 use clickhouse_rs::{row, types::Block, Pool};
 use env::VarError;
-use quick_xml::de::{from_str, DeError, Deserializer};
+use quick_xml::de::Deserializer;
 use quick_xml::{events::Event, Reader};
 use serde::Deserialize;
+use std::env;
 use std::io::{BufRead, BufReader};
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use std::str::from_utf8;
-use std::{env, path::Path};
 use std::{fs::File, time::Instant};
 
 #[global_allocator]
@@ -28,7 +27,6 @@ struct Page {
     revisions: Vec<Revision>,
 }
 
-// <id>1</id>
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct Revision {
@@ -39,9 +37,9 @@ struct Revision {
     comment: Option<Comment>,
     model: String,
     format: String,
-    text: Text,
+    text: Text, // TODO
     sha1: String,
-    minor: Option<String>,
+    minor: Option<String>, // TODO
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -49,7 +47,7 @@ struct Revision {
 struct Comment {
     #[serde(rename = "$value")]
     comment: Option<String>,
-    deleted: Option<String>,
+    deleted: Option<String>, // TODO
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -58,7 +56,7 @@ struct Contributor {
     ip: Option<String>,
     username: Option<String>,
     id: Option<u32>,
-    deleted: Option<String>,
+    deleted: Option<String>, // TODO
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -195,6 +193,7 @@ async fn main() -> Result<()> {
                 namespace: page.ns,
                 title: page.title.as_str(),
                 id: revision.id,
+                parentid: revision.parentid.unwrap_or(0),
                 timestamp: timestamp,
                 comment: comment,
                 model: revision.model.as_str(),
