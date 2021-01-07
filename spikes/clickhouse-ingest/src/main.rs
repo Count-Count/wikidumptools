@@ -96,7 +96,7 @@ fn skip_to_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_na
 }
 
 async fn process_stream<T: BufRead>(
-    buf_reader: T,
+    buf_reader: &mut T,
     client: &mut ClientHandle,
     database_name: &str,
     dry_run: bool,
@@ -251,24 +251,30 @@ async fn main() -> Result<()> {
         home.push_str(homepath.as_ref());
         Ok(home)
     })?;
+    let file_name = env::args().into_iter().nth(1).unwrap();
     let mut dump_file = PathBuf::from(home_dir);
     dump_file.push("wpdumps");
-    dump_file.push(env::args().into_iter().nth(1).unwrap());
+    dump_file.push(file_name.as_str());
 
     let buf_size = 2 * 1024 * 1024;
-    if dump_file.ends_with(".gz") {
-        let mut command = Command::new("zcat");
+    if file_name.ends_with(".gz") {
+        let mut command = Command::new("gzip");
+        command.arg("-dc");
         // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
         command.stderr(Stdio::piped()).stdin(Stdio::piped());
 
         let mut handle = command.arg(dump_file).stdout(Stdio::piped()).spawn()?;
         let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
-        let buf_reader = BufReader::with_capacity(buf_size, stdout);
-        process_stream(buf_reader, &mut client, database_name, dry_run).await?;
+        let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
+        process_stream(&mut buf_reader, &mut client, database_name, dry_run).await?;
+        let res = handle.wait_with_output()?; // needed since stderr is piped
+        if !res.status.success() {
+            return Err(anyhow!("gunzip failed: {}", from_utf8(res.stderr.as_ref())?.to_owned()));
+        }
     } else {
         let file = File::open(&dump_file)?;
-        let buf_reader = BufReader::with_capacity(buf_size, file);
-        process_stream(buf_reader, &mut client, database_name, dry_run).await?;
+        let mut buf_reader = BufReader::with_capacity(buf_size, file);
+        process_stream(&mut buf_reader, &mut client, database_name, dry_run).await?;
     }
 
     Ok(())
