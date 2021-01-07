@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use chrono::DateTime;
 use chrono_tz::Tz;
+use clickhouse_rs::ClientHandle;
 use clickhouse_rs::{row, types::Block, Pool};
 use env::VarError;
 use quick_xml::de::Deserializer;
@@ -11,6 +12,7 @@ use serde::Deserialize;
 use std::env;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::str::from_utf8;
 use std::{fs::File, time::Instant};
 
@@ -93,73 +95,12 @@ fn skip_to_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_na
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let dry_run = env::args().into_iter().nth(1).map_or(false, |arg| arg == "-n");
-
-    let database_url = "tcp://localhost:9000/?compression=lz4";
-
-    // env::set_var("RUST_LOG", "clickhouse_rs=debug");
-    // env_logger::init();
-
-    let database_name = "metawiki";
-
-    let create_stmt = format!(
-        "
-    CREATE TABLE IF NOT EXISTS {}.revision
-    (
-        pageid UInt32 CODEC(Delta, ZSTD),
-        namespace Int16 CODEC(Delta, ZSTD),
-        title String CODEC(ZSTD),
-        timestamp DateTime('UTC') CODEC(Delta, ZSTD),
-        id UInt32 CODEC(Delta, ZSTD),
-        parentid UInt32 CODEC(Delta, ZSTD),
-        userid UInt32 CODEC(Delta, ZSTD),
-        username String CODEC(ZSTD),
-        ipv4 IPv4 CODEC(Delta, ZSTD),
-        ipv6 IPv6 CODEC(ZSTD),
-        comment String CODEC(ZSTD),
-        textid UInt32 CODEC(Delta, ZSTD),
-        textbytes UInt32 CODEC(Delta, ZSTD),
-        model LowCardinality(String) CODEC(ZSTD),
-        format LowCardinality(String) CODEC(ZSTD),
-        sha1 FixedString(32) CODEC(ZSTD),
-        minor UInt8 CODEC(Delta, ZSTD),
-        commentdeleted UInt8 CODEC(Delta, ZSTD),
-        userdeleted UInt8 CODEC(Delta, ZSTD),
-        textdeleted UInt8 CODEC(Delta, ZSTD)
-    )
-    ENGINE = MergeTree()
---    PARTITION BY toYYYYMM(timestamp)
-    PRIMARY KEY (pageid, timestamp)
-    ",
-        database_name
-    );
-    let pool = Pool::new(database_url);
-    let mut client = pool.get_handle().await?;
-    if !dry_run {
-        client
-            .execute(format!("CREATE DATABASE IF NOT EXISTS {}", database_name))
-            .await?;
-        // client
-        //     .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
-        //     .await?;
-        client.execute(create_stmt).await?;
-    }
-
-    let home_dir = env::var("HOME").or_else::<VarError, _>(|_err| {
-        let mut home = env::var("HOMEDRIVE")?;
-        let homepath = env::var("HOMEPATH")?;
-        home.push_str(homepath.as_ref());
-        Ok(home)
-    })?;
-    let mut dump_file = PathBuf::from(home_dir);
-    dump_file.push("wpdumps");
-    dump_file.push(env::args().into_iter().nth(1).unwrap());
-    let file = File::open(&dump_file)?;
-    let file_size = file.metadata().unwrap().len();
-    let buf_size = 2 * 1024 * 1024;
-    let buf_reader = BufReader::with_capacity(buf_size, file);
+async fn process_stream<T: BufRead>(
+    buf_reader: T,
+    client: &mut ClientHandle,
+    database_name: &str,
+    dry_run: bool,
+) -> Result<()> {
     let mut reader = Reader::from_reader(buf_reader);
     reader.expand_empty_elements(true).check_end_names(true).trim_text(true);
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
@@ -237,15 +178,98 @@ async fn main() -> Result<()> {
     if record_count > 0 && !dry_run {
         client.insert(format!("{}.revision", database_name), block).await?;
     }
-    let mib_read = file_size as f64 / 1024.0 / 1024.0;
-    let elapsed_seconds = now.elapsed().as_secs_f64();
+    // let mib_read = file_size as f64 / 1024.0 / 1024.0;
+    // let elapsed_seconds = now.elapsed().as_secs_f64();
 
-    eprintln!(
-        "Read {} revisions ({:.2} MiB) in {:.2} seconds ({:.2} MiB/s).",
-        total_record_count,
-        mib_read,
-        elapsed_seconds,
-        mib_read / elapsed_seconds
+    // eprintln!(
+    //     "Read {} revisions ({:.2} MiB) in {:.2} seconds ({:.2} MiB/s).",
+    //     total_record_count,
+    //     mib_read,
+    //     elapsed_seconds,
+    //     mib_read / elapsed_seconds
+    // );
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let dry_run = env::args().into_iter().nth(1).map_or(false, |arg| arg == "-n");
+
+    let database_url = "tcp://localhost:9000/?compression=lz4";
+
+    // env::set_var("RUST_LOG", "clickhouse_rs=debug");
+    // env_logger::init();
+
+    let database_name = "metawiki";
+
+    let create_stmt = format!(
+        "
+    CREATE TABLE IF NOT EXISTS {}.revision
+    (
+        pageid UInt32 CODEC(Delta, ZSTD),
+        namespace Int16 CODEC(Delta, ZSTD),
+        title String CODEC(ZSTD),
+        timestamp DateTime('UTC') CODEC(Delta, ZSTD),
+        id UInt32 CODEC(Delta, ZSTD),
+        parentid UInt32 CODEC(Delta, ZSTD),
+        userid UInt32 CODEC(Delta, ZSTD),
+        username String CODEC(ZSTD),
+        ipv4 IPv4 CODEC(Delta, ZSTD),
+        ipv6 IPv6 CODEC(ZSTD),
+        comment String CODEC(ZSTD),
+        textid UInt32 CODEC(Delta, ZSTD),
+        textbytes UInt32 CODEC(Delta, ZSTD),
+        model LowCardinality(String) CODEC(ZSTD),
+        format LowCardinality(String) CODEC(ZSTD),
+        sha1 FixedString(32) CODEC(ZSTD),
+        minor UInt8 CODEC(Delta, ZSTD),
+        commentdeleted UInt8 CODEC(Delta, ZSTD),
+        userdeleted UInt8 CODEC(Delta, ZSTD),
+        textdeleted UInt8 CODEC(Delta, ZSTD)
+    )
+    ENGINE = MergeTree()
+--    PARTITION BY toYYYYMM(timestamp)
+    PRIMARY KEY (pageid, timestamp)
+    ",
+        database_name
     );
+    let pool = Pool::new(database_url);
+    let mut client = pool.get_handle().await?;
+    if !dry_run {
+        client
+            .execute(format!("CREATE DATABASE IF NOT EXISTS {}", database_name))
+            .await?;
+        // client
+        //     .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
+        //     .await?;
+        client.execute(create_stmt).await?;
+    }
+
+    let home_dir = env::var("HOME").or_else::<VarError, _>(|_err| {
+        let mut home = env::var("HOMEDRIVE")?;
+        let homepath = env::var("HOMEPATH")?;
+        home.push_str(homepath.as_ref());
+        Ok(home)
+    })?;
+    let mut dump_file = PathBuf::from(home_dir);
+    dump_file.push("wpdumps");
+    dump_file.push(env::args().into_iter().nth(1).unwrap());
+
+    let buf_size = 2 * 1024 * 1024;
+    if dump_file.ends_with(".gz") {
+        let mut command = Command::new("zcat");
+        // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
+        command.stderr(Stdio::piped()).stdin(Stdio::piped());
+
+        let mut handle = command.arg(dump_file).stdout(Stdio::piped()).spawn()?;
+        let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
+        let buf_reader = BufReader::with_capacity(buf_size, stdout);
+        process_stream(buf_reader, &mut client, database_name, dry_run);
+    } else {
+        let file = File::open(&dump_file)?;
+        let buf_reader = BufReader::with_capacity(buf_size, file);
+        process_stream(buf_reader, &mut client, database_name, dry_run);
+    }
+
     Ok(())
 }
