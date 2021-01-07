@@ -578,7 +578,7 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let res = run().await;
     if let Err(e) = res {
