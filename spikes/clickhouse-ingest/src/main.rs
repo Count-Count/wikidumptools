@@ -164,8 +164,8 @@ async fn main() -> Result<()> {
     let mut record_count: u32 = 0;
     let mut total_record_count: u32 = 0;
     let now = Instant::now();
+    let mut block = Block::with_capacity(1000);
     loop {
-        let mut block = Block::with_capacity(100);
         let page_res = Page::deserialize(&mut deserializer);
         if let Err(DeError::End) = page_res {
             // done
@@ -215,17 +215,17 @@ async fn main() -> Result<()> {
             })?;
             total_record_count += 1;
             record_count += 1;
-            if record_count == 100 {
+            if record_count == 1000 {
                 if !dry_run {
                     client.insert(format!("{}.revision", database_name), block).await?;
                 }
                 record_count = 0;
-                block = Block::with_capacity(100);
+                block = Block::with_capacity(1000);
             }
         }
-        if record_count > 0 && !dry_run {
-            client.insert(format!("{}.revision", database_name), block).await?;
-        }
+    }
+    if record_count > 0 && !dry_run {
+        client.insert(format!("{}.revision", database_name), block).await?;
     }
     let mib_read = file_size as f64 / 1024.0 / 1024.0;
     let elapsed_seconds = now.elapsed().as_secs_f64();
