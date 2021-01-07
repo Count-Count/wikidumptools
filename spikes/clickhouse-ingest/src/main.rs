@@ -264,11 +264,11 @@ async fn main() -> Result<()> {
         let mut handle = command.arg(dump_file).stdout(Stdio::piped()).spawn()?;
         let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
         let buf_reader = BufReader::with_capacity(buf_size, stdout);
-        process_stream(buf_reader, &mut client, database_name, dry_run);
+        process_stream(buf_reader, &mut client, database_name, dry_run).await?;
     } else {
         let file = File::open(&dump_file)?;
         let buf_reader = BufReader::with_capacity(buf_size, file);
-        process_stream(buf_reader, &mut client, database_name, dry_run);
+        process_stream(buf_reader, &mut client, database_name, dry_run).await?;
     }
 
     Ok(())
