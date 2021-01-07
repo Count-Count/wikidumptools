@@ -23,7 +23,7 @@ struct Page {
     title: String,
     ns: i16,
     id: u32,
-    redirect: Option<Redirect>,
+    redirect: Option<Redirect>, // TODO?
     #[serde(rename = "revision", default)]
     revisions: Vec<Revision>,
 }
@@ -38,9 +38,9 @@ struct Revision {
     comment: Option<Comment>,
     model: String,
     format: String,
-    text: Text, // TODO
+    text: Text,
     sha1: String,
-    minor: Option<String>, // TODO
+    minor: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -48,7 +48,7 @@ struct Revision {
 struct Comment {
     #[serde(rename = "$value")]
     comment: Option<String>,
-    deleted: Option<String>, // TODO
+    deleted: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -57,7 +57,7 @@ struct Contributor {
     ip: Option<String>,
     username: Option<String>,
     id: Option<u32>,
-    deleted: Option<String>, // TODO
+    deleted: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -123,7 +123,11 @@ async fn main() -> Result<()> {
         textbytes UInt32 CODEC(Delta, ZSTD),
         model LowCardinality(String) CODEC(ZSTD),
         format LowCardinality(String) CODEC(ZSTD),
-        sha1 FixedString(32) CODEC(ZSTD)
+        sha1 FixedString(32) CODEC(ZSTD),
+        minor UInt8 CODEC(Delta, ZSTD),
+        commentdeleted UInt8 CODEC(Delta, ZSTD),
+        userdeleted UInt8 CODEC(Delta, ZSTD),
+        textdeleted UInt8 CODEC(Delta, ZSTD)
     )
     ENGINE = MergeTree()
 --    PARTITION BY toYYYYMM(timestamp)
@@ -178,13 +182,14 @@ async fn main() -> Result<()> {
                 .with_timezone(&Tz::Zulu);
 
             let mut comment = "";
+            let mut commentdeleted = 0_u8;
             if let Some(ref rev_comment) = revision.comment {
                 if let Some(ref rev_comment_text) = rev_comment.comment {
                     comment = rev_comment_text.as_str();
+                } else if rev_comment.deleted.is_some() {
+                    commentdeleted = 1;
                 }
             }
-            let username = revision.contributor.username.as_deref().unwrap_or("");
-            let userid = revision.contributor.id.unwrap_or(0);
             let mut ipv4 = "0.0.0.0";
             let mut ipv6 = "::";
             if let Some(s) = revision.contributor.ip.as_deref() {
@@ -196,7 +201,6 @@ async fn main() -> Result<()> {
                     return Err(anyhow!("Could not parse IP address '{}'", s.to_owned()));
                 }
             }
-
             block.push(row! {
                 pageid: page.id,
                 namespace: page.ns,
@@ -210,8 +214,14 @@ async fn main() -> Result<()> {
                 sha1: revision.sha1.as_str(),
                 ipv4: ipv4,
                 ipv6: ipv6,
-                username: username,
-                userid: userid
+                username: revision.contributor.username.as_deref().unwrap_or(""),
+                userid: revision.contributor.id.unwrap_or(0),
+                textid: revision.text.id.unwrap_or(0),
+                textbytes: revision.text.bytes.unwrap_or(0),
+                commentdeleted: commentdeleted,
+                userdeleted: u8::from(revision.contributor.deleted.is_some()),
+                textdeleted: u8::from(revision.text.deleted.is_some()),
+                minor: u8::from(revision.minor.is_some())
             })?;
             total_record_count += 1;
             record_count += 1;
