@@ -123,7 +123,7 @@ async fn main() -> Result<()> {
         textbytes UInt32 CODEC(Delta, ZSTD),
         model LowCardinality(String) CODEC(ZSTD),
         format LowCardinality(String) CODEC(ZSTD),
-        sha1 FixedString(32) CODEC(NONE)
+        sha1 FixedString(32) CODEC(ZSTD)
     )
     ENGINE = MergeTree()
 --    PARTITION BY toYYYYMM(timestamp)
