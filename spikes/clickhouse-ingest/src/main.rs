@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
 
     let create_stmt = format!(
         "
-    CREATE TABLE {}.revision
+    CREATE TABLE IF NOT EXISTS {}.revision
     (
         pageid UInt32 CODEC(Delta, ZSTD),
         namespace Int16 CODEC(Delta, ZSTD),
@@ -141,9 +141,9 @@ async fn main() -> Result<()> {
         client
             .execute(format!("CREATE DATABASE IF NOT EXISTS {}", database_name))
             .await?;
-        client
-            .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
-            .await?;
+        // client
+        //     .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
+        //     .await?;
         client.execute(create_stmt).await?;
     }
 
