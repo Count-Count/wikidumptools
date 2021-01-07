@@ -157,7 +157,6 @@ async fn main() -> Result<()> {
     let buf_size = 2 * 1024 * 1024;
     let buf_reader = BufReader::with_capacity(buf_size, file);
     let mut reader = Reader::from_reader(buf_reader);
-    // let mut reader = Reader::from_str(test_page);
     reader.expand_empty_elements(true).check_end_names(true).trim_text(true);
     let mut buf: Vec<u8> = Vec::with_capacity(1000 * 1024);
     skip_to_end_tag(&mut reader, &mut buf, b"siteinfo")?;
@@ -173,7 +172,6 @@ async fn main() -> Result<()> {
             break;
         }
         let page = page_res?;
-        // println!("Revisions: {}", page.revisions.len());
         for revision in page.revisions {
             let timestamp = DateTime::parse_from_rfc3339(revision.timestamp.as_ref())
                 .unwrap()
@@ -225,10 +223,8 @@ async fn main() -> Result<()> {
                 block = Block::with_capacity(100);
             }
         }
-        if record_count > 0 {
-            if !dry_run {
-                client.insert(format!("{}.revision", database_name), block).await?;
-            }
+        if record_count > 0 && !dry_run {
+            client.insert(format!("{}.revision", database_name), block).await?;
         }
     }
     let mib_read = file_size as f64 / 1024.0 / 1024.0;
