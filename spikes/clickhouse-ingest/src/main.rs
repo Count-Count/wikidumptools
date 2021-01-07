@@ -5,6 +5,7 @@ use chrono_tz::Tz;
 use clickhouse_rs::{row, types::Block, Pool};
 use env::VarError;
 use quick_xml::de::Deserializer;
+use quick_xml::DeError;
 use quick_xml::{events::Event, Reader};
 use serde::Deserialize;
 use std::env;
@@ -101,8 +102,11 @@ async fn main() -> Result<()> {
     // env::set_var("RUST_LOG", "clickhouse_rs=debug");
     // env_logger::init();
 
-    let create_stmt = "
-    CREATE TABLE dewiki.revision
+    let database_name = "metawiki";
+
+    let create_stmt = format!(
+        "
+    CREATE TABLE {}.revision
     (
         pageid UInt32 CODEC(Delta, ZSTD),
         namespace Int16 CODEC(Delta, ZSTD),
@@ -124,18 +128,20 @@ async fn main() -> Result<()> {
     ENGINE = MergeTree()
 --    PARTITION BY toYYYYMM(timestamp)
     PRIMARY KEY (pageid, timestamp)
-    ";
+    ",
+        database_name
+    );
     let pool = Pool::new(database_url);
     let mut client = pool.get_handle().await?;
     if !dry_run {
-        client.execute("CREATE DATABASE IF NOT EXISTS dewiki").await?;
-        client.execute("DROP TABLE IF EXISTS dewiki.revision").await?;
+        client
+            .execute(format!("CREATE DATABASE IF NOT EXISTS {}", database_name))
+            .await?;
+        client
+            .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
+            .await?;
         client.execute(create_stmt).await?;
     }
-
-    let ts = DateTime::parse_from_rfc3339("2001-05-31T08:19:59Z")
-        .unwrap()
-        .with_timezone(&Tz::Zulu);
 
     let home_dir = env::var("HOME").or_else::<VarError, _>(|_err| {
         let mut home = env::var("HOMEDRIVE")?;
@@ -145,7 +151,7 @@ async fn main() -> Result<()> {
     })?;
     let mut dump_file = PathBuf::from(home_dir);
     dump_file.push("wpdumps");
-    dump_file.push("dewiki-20201201-stub-meta-history.xml");
+    dump_file.push("metawiki-20210101-stub-meta-history1.xml");
     let file = File::open(&dump_file)?;
     let file_size = file.metadata().unwrap().len();
     let buf_size = 2 * 1024 * 1024;
@@ -161,7 +167,12 @@ async fn main() -> Result<()> {
     let now = Instant::now();
     loop {
         let mut block = Block::with_capacity(100);
-        let page = Page::deserialize(&mut deserializer).unwrap();
+        let page_res = Page::deserialize(&mut deserializer);
+        if let Err(DeError::End) = page_res {
+            // done
+            break;
+        }
+        let page = page_res?;
         // println!("Revisions: {}", page.revisions.len());
         for revision in page.revisions {
             let timestamp = DateTime::parse_from_rfc3339(revision.timestamp.as_ref())
@@ -208,7 +219,7 @@ async fn main() -> Result<()> {
             record_count += 1;
             if record_count == 100 {
                 if !dry_run {
-                    client.insert("dewiki.revision", block).await?;
+                    client.insert(format!("{}.revision", database_name), block).await?;
                 }
                 record_count = 0;
                 block = Block::with_capacity(100);
@@ -216,22 +227,19 @@ async fn main() -> Result<()> {
         }
         if record_count > 0 {
             if !dry_run {
-                client.insert("dewiki.revision", block).await?;
+                client.insert(format!("{}.revision", database_name), block).await?;
             }
         }
     }
-    // if total_record_count == 10000 {
-    //     break;
-    // }
-    // if record_count > 0 {
-    //     client.insert("dewiki.revision", block).await?;
-    // }
     let mib_read = file_size as f64 / 1024.0 / 1024.0;
     let elapsed_seconds = now.elapsed().as_secs_f64();
 
     eprintln!(
-        "Read {} revisions ({:.2} MiB) in {:.2} seconds.",
-        total_record_count, mib_read, elapsed_seconds,
+        "Read {} revisions ({:.2} MiB) in {:.2} seconds ({:.2} MiB/s).",
+        total_record_count,
+        mib_read,
+        elapsed_seconds,
+        mib_read / elapsed_seconds
     );
     Ok(())
 }
