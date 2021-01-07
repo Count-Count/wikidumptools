@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
     })?;
     let mut dump_file = PathBuf::from(home_dir);
     dump_file.push("wpdumps");
-    dump_file.push("metawiki-20210101-stub-meta-history1.xml");
+    dump_file.push(env::args().into_iter().nth(1).unwrap());
     let file = File::open(&dump_file)?;
     let file_size = file.metadata().unwrap().len();
     let buf_size = 2 * 1024 * 1024;
