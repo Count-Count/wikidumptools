@@ -68,6 +68,10 @@ struct Text {
     bytes: Option<u32>,
     id: Option<u32>,
     deleted: Option<String>,
+    #[serde(rename = "$value")]
+    text: Option<String>,
+    #[serde(rename = "xml:space")]
+    xml_space: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -99,6 +103,7 @@ async fn process_stream<T: BufRead>(
     buf_reader: &mut T,
     client: &mut ClientHandle,
     database_name: &str,
+    fill_revision_table: bool,
     dry_run: bool,
 ) -> Result<()> {
     let mut reader = Reader::from_reader(buf_reader);
@@ -109,6 +114,11 @@ async fn process_stream<T: BufRead>(
     let mut record_count: u32 = 0;
     let mut total_record_count: u32 = 0;
     let now = Instant::now();
+    let table = if fill_revision_table {
+        format!("{}.revision", database_name)
+    } else {
+        format!("{}.latest", database_name)
+    };
     let mut block = Block::with_capacity(1000);
     loop {
         let page_res = Page::deserialize(&mut deserializer);
@@ -142,33 +152,59 @@ async fn process_stream<T: BufRead>(
                     return Err(anyhow!("Could not parse IP address '{}'", s.to_owned()));
                 }
             }
-            block.push(row! {
-                pageid: page.id,
-                namespace: page.ns,
-                title: page.title.as_str(),
-                id: revision.id,
-                parentid: revision.parentid.unwrap_or(0),
-                timestamp: timestamp,
-                comment: comment,
-                model: revision.model.as_str(),
-                format: revision.format.as_str(),
-                sha1: revision.sha1.as_str(),
-                ipv4: ipv4,
-                ipv6: ipv6,
-                username: revision.contributor.username.as_deref().unwrap_or(""),
-                userid: revision.contributor.id.unwrap_or(0),
-                textid: revision.text.id.unwrap_or(0),
-                textbytes: revision.text.bytes.unwrap_or(0),
-                commentdeleted: commentdeleted,
-                userdeleted: u8::from(revision.contributor.deleted.is_some()),
-                textdeleted: u8::from(revision.text.deleted.is_some()),
-                minor: u8::from(revision.minor.is_some())
-            })?;
+            if fill_revision_table {
+                block.push(row! {
+                    pageid: page.id,
+                    namespace: page.ns,
+                    title: page.title.as_str(),
+                    revisionid: revision.id,
+                    parentid: revision.parentid.unwrap_or(0),
+                    timestamp: timestamp,
+                    comment: comment,
+                    model: revision.model.as_str(),
+                    format: revision.format.as_str(),
+                    sha1: revision.sha1.as_str(),
+                    ipv4: ipv4,
+                    ipv6: ipv6,
+                    username: revision.contributor.username.as_deref().unwrap_or(""),
+                    userid: revision.contributor.id.unwrap_or(0),
+                    textid: revision.text.id.unwrap_or(0),
+                    textbytes: revision.text.bytes.unwrap_or(0),
+                    commentdeleted: commentdeleted,
+                    userdeleted: u8::from(revision.contributor.deleted.is_some()),
+                    textdeleted: u8::from(revision.text.deleted.is_some()),
+                    minor: u8::from(revision.minor.is_some())
+                })?;
+            } else {
+                block.push(row! {
+                    pageid: page.id,
+                    namespace: page.ns,
+                    title: page.title.as_str(),
+                    revisionid: revision.id,
+                    parentid: revision.parentid.unwrap_or(0),
+                    timestamp: timestamp,
+                    comment: comment,
+                    model: revision.model.as_str(),
+                    format: revision.format.as_str(),
+                    sha1: revision.sha1.as_str(),
+                    ipv4: ipv4,
+                    ipv6: ipv6,
+                    username: revision.contributor.username.as_deref().unwrap_or(""),
+                    userid: revision.contributor.id.unwrap_or(0),
+                    textid: revision.text.id.unwrap_or(0),
+                    text: revision.text.text.as_deref().unwrap_or(""),
+                    textbytes: revision.text.bytes.unwrap_or(0),
+                    commentdeleted: commentdeleted,
+                    userdeleted: u8::from(revision.contributor.deleted.is_some()),
+                    textdeleted: u8::from(revision.text.deleted.is_some()),
+                    minor: u8::from(revision.minor.is_some())
+                })?;
+            }
             total_record_count += 1;
             record_count += 1;
             if record_count == 1000 {
                 if !dry_run {
-                    client.insert(format!("{}.revision", database_name), block).await?;
+                    client.insert(&table, block).await?;
                 }
                 record_count = 0;
                 block = Block::with_capacity(1000);
@@ -176,7 +212,7 @@ async fn process_stream<T: BufRead>(
         }
     }
     if record_count > 0 && !dry_run {
-        client.insert(format!("{}.revision", database_name), block).await?;
+        client.insert(&table, block).await?;
     }
     // let mib_read = file_size as f64 / 1024.0 / 1024.0;
     // let elapsed_seconds = now.elapsed().as_secs_f64();
@@ -200,9 +236,23 @@ async fn main() -> Result<()> {
     // env::set_var("RUST_LOG", "clickhouse_rs=debug");
     // env_logger::init();
 
-    let database_name = "metawiki";
+    let home_dir = env::var("HOME").or_else::<VarError, _>(|_err| {
+        let mut home = env::var("HOMEDRIVE")?;
+        let homepath = env::var("HOMEPATH")?;
+        home.push_str(homepath.as_ref());
+        Ok(home)
+    })?;
 
-    let create_stmt = format!(
+    let file_name = env::args().into_iter().nth(1).unwrap();
+    let mut dump_file = PathBuf::from(home_dir);
+    dump_file.push("wpdumps");
+    dump_file.push(file_name.as_str());
+
+    let database_name = &file_name.as_str()[..file_name.find('-').unwrap()];
+
+    let fill_revision_table = file_name.contains("-stub-");
+
+    let create_revision_stmt = format!(
         "
     CREATE TABLE IF NOT EXISTS {}.revision
     (
@@ -210,7 +260,7 @@ async fn main() -> Result<()> {
         namespace Int16 CODEC(Delta, ZSTD),
         title String CODEC(ZSTD),
         timestamp DateTime('UTC') CODEC(Delta, ZSTD),
-        id UInt32 CODEC(Delta, ZSTD),
+        revisionid UInt32 CODEC(Delta, ZSTD),
         parentid UInt32 CODEC(Delta, ZSTD),
         userid UInt32 CODEC(Delta, ZSTD),
         username String CODEC(ZSTD),
@@ -233,6 +283,37 @@ async fn main() -> Result<()> {
     ",
         database_name
     );
+    let create_latest_stmt = format!(
+        "
+    CREATE TABLE IF NOT EXISTS {}.latest
+    (
+        pageid UInt32 CODEC(Delta, ZSTD),
+        namespace Int16 CODEC(Delta, ZSTD),
+        title String CODEC(ZSTD),
+        timestamp DateTime('UTC') CODEC(Delta, ZSTD),
+        revisionid UInt32 CODEC(Delta, ZSTD),
+        parentid UInt32 CODEC(Delta, ZSTD),
+        userid UInt32 CODEC(Delta, ZSTD),
+        username String CODEC(ZSTD),
+        ipv4 IPv4 CODEC(Delta, ZSTD),
+        ipv6 IPv6 CODEC(ZSTD),
+        comment String CODEC(ZSTD),
+        textid UInt32 CODEC(Delta, ZSTD),
+        textbytes UInt32 CODEC(Delta, ZSTD),
+        text String CODEC(ZSTD),
+        model LowCardinality(String) CODEC(ZSTD),
+        format LowCardinality(String) CODEC(ZSTD),
+        sha1 FixedString(32) CODEC(ZSTD),
+        minor UInt8 CODEC(Delta, ZSTD),
+        commentdeleted UInt8 CODEC(Delta, ZSTD),
+        userdeleted UInt8 CODEC(Delta, ZSTD),
+        textdeleted UInt8 CODEC(Delta, ZSTD)
+    )
+    ENGINE = ReplacingMergeTree(revisionid)
+    ORDER BY pageid
+    ",
+        database_name
+    );
     let pool = Pool::new(database_url);
     let mut client = pool.get_handle().await?;
     if !dry_run {
@@ -242,31 +323,36 @@ async fn main() -> Result<()> {
         // client
         //     .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
         //     .await?;
-        client.execute(create_stmt).await?;
+        if fill_revision_table {
+            client.execute(create_revision_stmt).await?;
+        } else {
+            client.execute(create_latest_stmt).await?;
+        }
     }
 
-    let home_dir = env::var("HOME").or_else::<VarError, _>(|_err| {
-        let mut home = env::var("HOMEDRIVE")?;
-        let homepath = env::var("HOMEPATH")?;
-        home.push_str(homepath.as_ref());
-        Ok(home)
-    })?;
-    let file_name = env::args().into_iter().nth(1).unwrap();
-    let mut dump_file = PathBuf::from(home_dir);
-    dump_file.push("wpdumps");
-    dump_file.push(file_name.as_str());
-
     let buf_size = 2 * 1024 * 1024;
-    if file_name.ends_with(".gz") {
-        let mut command = Command::new("gzip");
-        command.arg("-dc");
+    if file_name.ends_with(".gz") || file_name.ends_with(".bz2") {
+        let mut command: Command;
+        if file_name.ends_with(".gz") {
+            command = Command::new("gzip");
+            command.arg("-dc");
+        } else {
+            command = Command::new("bzcat");
+        }
         // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
         command.stderr(Stdio::piped()).stdin(Stdio::piped());
 
         let mut handle = command.arg(dump_file).stdout(Stdio::piped()).spawn()?;
         let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
         let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
-        process_stream(&mut buf_reader, &mut client, database_name, dry_run).await?;
+        process_stream(
+            &mut buf_reader,
+            &mut client,
+            database_name,
+            fill_revision_table,
+            dry_run,
+        )
+        .await?;
         let res = handle.wait_with_output()?; // needed since stderr is piped
         if !res.status.success() {
             return Err(anyhow!("gunzip failed: {}", from_utf8(res.stderr.as_ref())?.to_owned()));
@@ -274,7 +360,14 @@ async fn main() -> Result<()> {
     } else {
         let file = File::open(&dump_file)?;
         let mut buf_reader = BufReader::with_capacity(buf_size, file);
-        process_stream(&mut buf_reader, &mut client, database_name, dry_run).await?;
+        process_stream(
+            &mut buf_reader,
+            &mut client,
+            database_name,
+            fill_revision_table,
+            dry_run,
+        )
+        .await?;
     }
 
     Ok(())
