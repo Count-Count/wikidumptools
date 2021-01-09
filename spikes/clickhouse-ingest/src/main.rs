@@ -300,7 +300,7 @@ async fn main() -> Result<()> {
         comment String CODEC(ZSTD),
         textid UInt32 CODEC(Delta, ZSTD),
         textbytes UInt32 CODEC(Delta, ZSTD),
-        text String CODEC(ZSTD),
+        text String CODEC(ZSTD(5)),
         model LowCardinality(String) CODEC(ZSTD),
         format LowCardinality(String) CODEC(ZSTD),
         sha1 FixedString(32) CODEC(ZSTD),
