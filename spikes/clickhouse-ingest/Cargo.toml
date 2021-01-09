@@ -8,12 +8,12 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-clickhouse-rs = { git = "https://github.com/Count-Count/clickhouse-rs.git", rev = "4bf21f0d7adb2810767c41223a1e90e2bfd2ca2a" }
+clickhouse-rs = { git = "https://github.com/Count-Count/clickhouse-rs.git", branch = "fix_ipv6_representation_and_update_tokio" }
 #clickhouse-rs = { path = "../../../clickhouse-rs", version = "0.2.0-alpha.5" }
 serde = { version = "1.0", features = [ "derive" ] }
 quick-xml = { version = "0.20", features = [ "serialize" ] }
-tokio = { version = "0.2", features = ["full"] }
-env_logger = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+env_logger = "0.8"
 chrono = "0.4"
 chrono-tz = "0.5"
 [dependencies.snmalloc-rs]
