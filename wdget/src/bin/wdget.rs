@@ -372,7 +372,7 @@ async fn download(
     let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
     for (filename, file_data) in files {
         if Path::new(&filename).exists() {
-            check_existing_file(&filename, &file_data, verbose)?;
+            check_existing_file(filename, file_data, verbose)?;
             continue;
         }
         let partfile_name = create_partfile_name(filename);
@@ -404,7 +404,7 @@ async fn download(
             todo!();
         }
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, filename);
-        let download_res = download_file(&url, filename, &partfile_name, file_data, &client, verbose).await;
+        let download_res = download_file(&url, filename, &partfile_name, file_data, client, verbose).await;
         if !keep_partial && download_res.is_err() && Path::new(&partfile_name).is_file() {
             remove_file(&partfile_name)
                 .or_else::<(), _>(|err| {

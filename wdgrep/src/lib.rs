@@ -163,7 +163,7 @@ fn set_plain(buffer: &mut Buffer) {
     buffer.set_color(ColorSpec::new().set_fg(None)).unwrap();
 }
 
-fn ceiling_div(x: u64, y: u64) -> u64 {
+const fn ceiling_div(x: u64, y: u64) -> u64 {
     (x + y - 1) / y
 }
 
@@ -184,7 +184,7 @@ pub struct SearchOptions<'a> {
 }
 impl<'a> SearchOptions<'a> {
     #[must_use]
-    pub fn new() -> SearchOptions<'a> {
+    pub const fn new() -> SearchOptions<'a> {
         SearchOptions {
             restrict_namespaces: None,
             only_print_title: false,
@@ -413,7 +413,7 @@ fn search_dump_reader<B: BufRead>(
                                         stdout_buffer.clear();
                                     }
                                 } else {
-                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, &re);
+                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, re);
                                     stdout_writer.print(&stdout_buffer).unwrap();
                                     stdout_buffer.clear();
                                 }
@@ -552,7 +552,7 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
             dump_files.sort_unstable();
 
             fn get_stem(s: &str) -> &str {
-                s.strip_suffix(".7z").or_else(|| s.strip_suffix(".bz2")).unwrap_or(&s)
+                s.strip_suffix(".7z").or_else(|| s.strip_suffix(".bz2")).unwrap_or(s)
             }
             let mut i = 0;
             while i + 1 < dump_files.len() {
