@@ -3,9 +3,6 @@
 members = [
     "wdget",
     "wdgrep",
-    "spikes/update"
-    ]
-
-exclude = [
+    "spikes/update",
     "spikes/clickhouse-ingest"
-]
+    ]
