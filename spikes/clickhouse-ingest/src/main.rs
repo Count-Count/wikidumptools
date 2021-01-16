@@ -170,6 +170,7 @@ async fn process_stream<T: BufRead>(
                     userid: revision.contributor.id.unwrap_or(0),
                     textid: revision.text.id.unwrap_or(0),
                     textbytes: revision.text.bytes.unwrap_or(0),
+                    text: revision.text.text.as_deref().unwrap_or(""),
                     commentdeleted: commentdeleted,
                     userdeleted: u8::from(revision.contributor.deleted.is_some()),
                     textdeleted: u8::from(revision.text.deleted.is_some()),
@@ -250,7 +251,7 @@ async fn main() -> Result<()> {
 
     let database_name = &file_name.as_str()[..file_name.find('-').unwrap()];
 
-    let fill_revision_table = file_name.contains("-stub-");
+    let fill_revision_table = file_name.contains("-history");
 
     let create_revision_stmt = format!(
         "
@@ -267,6 +268,7 @@ async fn main() -> Result<()> {
         ipv4 IPv4 CODEC(Delta, ZSTD),
         ipv6 IPv6 CODEC(ZSTD),
         comment String CODEC(ZSTD),
+        text String CODEC(ZSTD(5)),
         textid UInt32 CODEC(Delta, ZSTD),
         textbytes UInt32 CODEC(Delta, ZSTD),
         model LowCardinality(String) CODEC(ZSTD),
