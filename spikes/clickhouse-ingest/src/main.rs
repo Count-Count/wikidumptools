@@ -331,13 +331,16 @@ async fn main() -> Result<()> {
     }
 
     let buf_size = 2 * 1024 * 1024;
-    if file_name.ends_with(".gz") || file_name.ends_with(".bz2") {
+    if file_name.ends_with(".gz") || file_name.ends_with(".bz2") || file_name.ends_with(".7z") {
         let mut command: Command;
         if file_name.ends_with(".gz") {
             command = Command::new("gzip");
             command.arg("-dc");
-        } else {
+        } else if file_name.ends_with(".bz2") {
             command = Command::new("bzcat");
+        } else {
+            command = Command::new("7z");
+            command.args(&["e", "-so"]);
         }
         // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
         command.stderr(Stdio::piped()).stdin(Stdio::piped());
