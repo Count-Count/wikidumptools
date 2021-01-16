@@ -124,6 +124,32 @@ pub async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<
     Ok(serde_json::from_str(body.as_str())?)
 }
 
+pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: Option<&str>) -> Result<String> {
+    let mut available_dates = get_available_dates(client, wiki).await?;
+    available_dates.reverse();
+    for date in available_dates.iter() {
+        let res = get_dump_status(client, wiki, date).await;
+        match res {
+            Ok(dump_status) => {
+                if let Some(dump_type) = dump_type {
+                    if dump_status
+                        .jobs
+                        .get(dump_type)
+                        .map_or(false, |job| job.status == "done")
+                    {
+                        return Ok(date.to_owned());
+                    }
+                } else {
+                    return Ok(date.to_owned());
+                }
+            }
+            Err(WDGetError::DumpStatusFileNotFound()) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    return Err(WDGetError::NoDumpDatesFound());
+}
+
 fn create_partfile_name(filename: &str) -> String {
     let mut res = String::from(filename);
     res.push_str(".part");
@@ -232,32 +258,6 @@ async fn download_file(
         println!("Downloaded {}.", &filename);
     }
     Ok(())
-}
-
-pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: Option<&str>) -> Result<String> {
-    let mut available_dates = get_available_dates(client, wiki).await?;
-    available_dates.reverse();
-    for date in available_dates.iter() {
-        let res = get_dump_status(client, wiki, date).await;
-        match res {
-            Ok(dump_status) => {
-                if let Some(dump_type) = dump_type {
-                    if dump_status
-                        .jobs
-                        .get(dump_type)
-                        .map_or(false, |job| job.status == "done")
-                    {
-                        return Ok(date.to_owned());
-                    }
-                } else {
-                    return Ok(date.to_owned());
-                }
-            }
-            Err(WDGetError::DumpStatusFileNotFound()) => continue,
-            Err(e) => return Err(e),
-        }
-    }
-    return Err(WDGetError::NoDumpDatesFound());
 }
 
 fn check_existing_file(filename: &str, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
