@@ -20,9 +20,6 @@ use std::str::from_utf8;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
-#[global_allocator]
-static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("I/O error {0}")]
