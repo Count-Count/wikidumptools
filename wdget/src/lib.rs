@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::time;
 
@@ -39,9 +39,11 @@ pub enum WDGetError {
     #[error("Specified date is invalid, must be YYYYMMDD or 'latest'")]
     InvalidDumpDate(),
     #[error("Error accessing file {0} - {1}")]
-    DumpFileAccessError(String, String),
+    DumpFileAccessError(PathBuf, String),
     #[error("Aborted by user")]
     AbortedByUser(),
+    #[error("Target directory {0} does not exist")]
+    TargetDirectoryDoesNotExist(PathBuf),
 }
 
 type Result<T> = std::result::Result<T, WDGetError>;
@@ -150,22 +152,32 @@ pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: O
     return Err(WDGetError::NoDumpDatesFound());
 }
 
-fn create_partfile_name(filename: &str) -> String {
-    let mut res = String::from(filename);
-    res.push_str(".part");
-    res
+fn get_file_name_expect(file_path: &Path) -> &str {
+    file_path
+        .file_name()
+        .expect("Path has no filename")
+        .to_str()
+        .expect("Filename is not in UTF-8")
+}
+
+fn create_partfile_path(file_path: &Path) -> PathBuf {
+    let part_file_name = get_file_name_expect(file_path).to_owned() + ".part";
+    let mut part_path = file_path.to_owned();
+    part_path.set_file_name(part_file_name);
+    part_path
 }
 
 async fn download_file(
     url: &str,
-    filename: &str,
-    partfile_name: &str,
+    file_path: &Path,
+    partfile_path: &Path,
     file_data: &DumpFileInfo,
     client: &Client,
     verbose: bool,
 ) -> Result<()> {
+    let file_name = get_file_name_expect(file_path);
     if verbose {
-        eprint!("Downloading {}...", filename);
+        eprint!("Downloading {}...", file_name);
         std::io::stderr().flush().unwrap();
     }
     let mut r = client.get(url).send().await?.error_for_status()?;
@@ -173,10 +185,10 @@ async fn download_file(
         .create(true)
         .truncate(true)
         .write(true)
-        .open(&partfile_name)
+        .open(&partfile_path)
         .map_err(|e| {
             WDGetError::DumpFileAccessError(
-                partfile_name.to_owned(),
+                partfile_path.to_owned(),
                 std::format!("Could not create part file: {0}", e),
             )
         })?;
@@ -196,7 +208,7 @@ async fn download_file(
                 if let Some(chunk) = chunk? {
                     partfile.write_all(chunk.as_ref()).map_err(|e| {
                         WDGetError::DumpFileAccessError(
-                            partfile_name.to_owned(),
+                            partfile_path.to_owned(),
                             std::format!("Write error: {0}", e),
                         )
                     })?;
@@ -218,7 +230,7 @@ async fn download_file(
                         let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
                         let mut progress_string = std::format!(
                             "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                            &filename,
+                            &file_name,
                             bytes_read as f64 / 1024.0 / 1024.0,
                             total_mib,
                             mib_per_sec);
@@ -239,9 +251,9 @@ async fn download_file(
             }
         };
     }
-    std::fs::rename(&partfile_name, &filename).map_err(|e| {
+    std::fs::rename(&partfile_path, &file_name).map_err(|e| {
         WDGetError::DumpFileAccessError(
-            partfile_name.to_owned(),
+            partfile_path.to_owned(),
             std::format!("Could not rename part file: {0}", e),
         )
     })?;
@@ -249,98 +261,104 @@ async fn download_file(
     if verbose {
         eprintln!(
             "Downloaded {} - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
-            &filename,
+            &file_name,
             bytes_read as f64 / 1024.0 / 1024.0,
             start_time.elapsed().as_secs_f64(),
             bytes_read as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
         );
     } else {
-        println!("Downloaded {}.", &filename);
+        println!("Downloaded {}.", &file_name);
     }
     Ok(())
 }
 
-fn check_existing_file(filename: &str, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
-    let file_metadata = fs::metadata(&filename).map_err(|e| {
+fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
+    let file_name = get_file_name_expect(file_path);
+    let file_metadata = fs::metadata(file_path).map_err(|e| {
         WDGetError::DumpFileAccessError(
-            filename.to_owned(),
+            file_path.to_owned(),
             std::format!("Could not get file information: {0}", e),
         )
     })?;
     if let Some(expected_file_size) = &file_data.size {
         if *expected_file_size != file_metadata.len() {
             return Err(WDGetError::DumpFileAccessError(
-                filename.to_owned(),
+                file_path.to_owned(),
                 std::format!(
-                    "Dump file {} already exists, but its size does not match the expected size. Expected: {}, actual: {}.",
-                    &filename, expected_file_size, file_metadata.len()
+                    "Dump file already exists, but its size does not match the expected size. Expected: {}, actual: {}.",
+                    expected_file_size, file_metadata.len()
                 ),
             ));
         }
     }
     match file_data.sha1.as_ref() {
         Some(expected_sha1) => {
-            let mut file = fs::File::open(&filename).map_err(|e| {
+            let mut file = fs::File::open(file_path).map_err(|e| {
                 WDGetError::DumpFileAccessError(
-                    filename.to_owned(),
-                    std::format!("Could not read mapping file {}: {}", filename, e),
+                    file_path.to_owned(),
+                    std::format!("Could not read mapping file: {}", e),
                 )
             })?;
             if verbose {
-                eprint!("Verifying {}...", &filename);
+                eprint!("Verifying {}...", file_name);
                 std::io::stderr().flush().unwrap();
             }
             let start_time = Instant::now();
             let mut hasher = Sha1::new();
             let hashed_bytes = std::io::copy(&mut file, &mut hasher).map_err(|e| {
                 WDGetError::DumpFileAccessError(
-                    filename.to_owned(),
-                    std::format!("Could not read mapping file {}: {}", filename, e),
+                    file_path.to_owned(),
+                    std::format!("Could not read mapping file: {}", e),
                 )
             })?;
             let sha1_bytes = hasher.finalize();
             let actual_sha1 = format!("{:x}", sha1_bytes);
             if expected_sha1 != &actual_sha1 {
                 return Err(WDGetError::DumpFileAccessError(
-                    filename.to_owned(),
-                    std::format!(
-                        "{} already exists but the SHA1 digest differs from the expected one.",
-                        filename
-                    ),
+                    file_path.to_owned(),
+                    "File already exists but the SHA1 digest differs from the expected one.".to_owned(),
                 ));
             };
             if verbose {
                 eprintln!(
                     "\rVerified {} - OK - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
-                    &filename,
+                    file_name,
                     hashed_bytes as f64 / 1024.0 / 1024.0,
                     start_time.elapsed().as_secs_f64(),
                     hashed_bytes as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
                 );
             } else {
-                println!("Verified {} - OK.", &filename);
+                println!("Verified {} - OK.", &file_name);
             }
         }
         None => {
             eprintln!(
                 "WARNING: {} already exists but cannot be checked due to missing SHA1 checksum, skipping download.",
-                &filename
+                &file_name
             );
         }
     }
     Ok(())
 }
 
-pub async fn download(
+pub async fn download<T>(
     client: &Client,
     wiki: &str,
     date: &str,
     dump_type: &str,
     mirror: Option<&str>,
+    target_directory: T,
     verbose: bool,
     keep_partial: bool,
     resume_partial: bool,
-) -> Result<()> {
+) -> Result<()>
+where
+    T: AsRef<Path>,
+{
+    let target_directory = target_directory.as_ref();
+    if !target_directory.exists() {
+        return Err(WDGetError::TargetDirectoryDoesNotExist(target_directory.to_owned()));
+    }
     let dump_status = get_dump_status(client, wiki, date).await?;
     let job_info = dump_status.jobs.get(dump_type).ok_or(WDGetError::DumpTypeNotFound())?;
     if &job_info.status != "done" {
@@ -348,12 +366,15 @@ pub async fn download(
     }
     let files = job_info.files.as_ref().ok_or(WDGetError::DumpHasNoFiles())?;
     let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
-    for (filename, file_data) in files {
-        if Path::new(&filename).exists() {
-            check_existing_file(filename, file_data, verbose)?;
+    for (file_name, file_data) in files {
+        let mut target_file_pathbuf = target_directory.to_owned();
+        target_file_pathbuf.push(&file_name);
+        let target_file_path = target_file_pathbuf.as_path();
+        if target_file_pathbuf.exists() {
+            check_existing_file(target_file_path, file_data, verbose)?;
             continue;
         }
-        let partfile_name = create_partfile_name(filename);
+        let partfile_name = create_partfile_path(target_file_path);
         if resume_partial && Path::new(&partfile_name).exists() {
             let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
                 WDGetError::DumpFileAccessError(
@@ -381,12 +402,12 @@ pub async fn download(
             // partial download not yet implemented
             todo!();
         }
-        let url = format!("{}/{}/{}/{}", root_url, wiki, date, filename);
-        let download_res = download_file(&url, filename, &partfile_name, file_data, client, verbose).await;
+        let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
+        let download_res = download_file(&url, target_file_path, &partfile_name, file_data, client, verbose).await;
         if !keep_partial && download_res.is_err() && Path::new(&partfile_name).is_file() {
             remove_file(&partfile_name)
                 .or_else::<(), _>(|err| {
-                    eprintln!("Could not remove {}: {}", &partfile_name, &err);
+                    eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
                     Ok(())
                 })
                 .unwrap();

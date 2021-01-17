@@ -2538,6 +2538,7 @@ dependencies = [
 name = "wikidumpget"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "atty",
  "clap 3.0.0-beta.2",
  "lazy_static",

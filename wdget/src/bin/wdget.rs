@@ -4,15 +4,17 @@
 //
 // Distributed under the terms of the MIT license.
 
+use anyhow::anyhow;
+use anyhow::Result;
 use clap::{App, AppSettings, Arg};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
+use std::env::current_dir;
+use std::path::PathBuf;
 use std::process;
 use termcolor::ColorChoice;
 use wikidumpget::*;
-
-type Result<T> = std::result::Result<T, WDGetError>;
 
 fn create_client() -> Result<Client> {
     Ok(reqwest::Client::builder()
@@ -62,7 +64,7 @@ async fn check_date_may_retrieve_latest(
     dump_type: Option<&str>,
 ) -> Result<String> {
     if date_spec == "latest" {
-        return get_latest_available_date(client, wiki, dump_type).await;
+        return Ok(get_latest_available_date(client, wiki, dump_type).await?);
     } else {
         lazy_static! {
             static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex");
@@ -70,7 +72,7 @@ async fn check_date_may_retrieve_latest(
         if RE.is_match(date_spec) {
             Ok(date_spec.to_owned())
         } else {
-            return Err(WDGetError::InvalidDumpDate());
+            Err(anyhow::Error::from(WDGetError::InvalidDumpDate()))
         }
     }
 }
@@ -155,12 +157,14 @@ async fn run() -> Result<()> {
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
             let dump_type = subcommand_matches.value_of("dump type").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
+            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not found:  {}", e))?;
             download(
                 &client,
                 wiki,
                 &date,
                 dump_type,
                 subcommand_matches.value_of("mirror"),
+                current_dir,
                 matches.is_present("verbose"),
                 false,
                 false,
