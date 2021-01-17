@@ -11,7 +11,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
 use std::env::current_dir;
-use std::path::PathBuf;
 use std::process;
 use termcolor::ColorChoice;
 use wikidumpget::*;
@@ -157,7 +156,7 @@ async fn run() -> Result<()> {
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
             let dump_type = subcommand_matches.value_of("dump type").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
-            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not found:  {}", e))?;
+            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible:  {}", e))?;
             download(
                 &client,
                 wiki,
