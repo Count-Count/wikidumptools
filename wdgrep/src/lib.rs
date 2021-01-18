@@ -51,11 +51,11 @@ pub enum Error {
 // unnest some XML parsing errors
 impl From<quick_xml::Error> for Error {
     #[inline]
-    fn from(error: quick_xml::Error) -> Error {
+    fn from(error: quick_xml::Error) -> Self {
         match error {
-            quick_xml::Error::Utf8(e) => Error::Utf8(e),
-            quick_xml::Error::Io(e) => Error::Io(e),
-            error => Error::Xml(error),
+            quick_xml::Error::Utf8(e) => Self::Utf8(e),
+            quick_xml::Error::Io(e) => Self::Io(e),
+            error => Self::Xml(error),
         }
     }
 }

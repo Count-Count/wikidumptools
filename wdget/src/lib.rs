@@ -129,7 +129,7 @@ pub async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<
 pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: Option<&str>) -> Result<String> {
     let mut available_dates = get_available_dates(client, wiki).await?;
     available_dates.reverse();
-    for date in available_dates.iter() {
+    for date in &available_dates {
         let res = get_dump_status(client, wiki, date).await;
         match res {
             Ok(dump_status) => {
