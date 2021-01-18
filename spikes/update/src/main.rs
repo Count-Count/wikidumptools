@@ -77,7 +77,8 @@ async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
     let mut total_count = 0;
     let mut total_bytes = 0_usize;
     let mut revs: String = String::new();
-    for (_, last_revision) in &page_to_last_revision {
+    for (page, last_revision) in &page_to_last_revision {
+        let _ = page; // will be used in the future
         revs.push_str(last_revision.to_string().as_str());
         count += 1;
         if count == revs_per_batch {

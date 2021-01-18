@@ -10,11 +10,11 @@ use quick_xml::DeError;
 use quick_xml::{events::Event, Reader};
 use serde::Deserialize;
 use std::env;
+use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::from_utf8;
-use std::{fs::File, time::Instant};
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
@@ -112,8 +112,6 @@ async fn process_stream<T: BufRead>(
     skip_to_end_tag(&mut reader, &mut buf, b"siteinfo")?;
     let mut deserializer = Deserializer::new(reader);
     let mut record_count: u32 = 0;
-    let mut total_record_count: u32 = 0;
-    let now = Instant::now();
     let table = if fill_revision_table {
         format!("{}.revision", database_name)
     } else {
@@ -201,7 +199,6 @@ async fn process_stream<T: BufRead>(
                     minor: u8::from(revision.minor.is_some())
                 })?;
             }
-            total_record_count += 1;
             record_count += 1;
             if record_count == 1000 {
                 if !dry_run {

@@ -547,17 +547,19 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
 
             // if there are multiple versions of the same file prefer plain to .7z to .bz2
             dump_files.sort_unstable();
-
-            fn get_stem(s: &str) -> &str {
-                s.strip_suffix(".7z").or_else(|| s.strip_suffix(".bz2")).unwrap_or(s)
-            }
-            let mut i = 0;
-            while i + 1 < dump_files.len() {
-                if get_stem(dump_files[i].as_str()) == get_stem(dump_files[i + 1].as_str()) {
-                    dump_files.remove(i + 1);
-                    continue;
+            {
+                // block to restrict scope of fn get_stem()
+                fn get_stem(s: &str) -> &str {
+                    s.strip_suffix(".7z").or_else(|| s.strip_suffix(".bz2")).unwrap_or(s)
                 }
-                i += 1;
+                let mut i = 0;
+                while i + 1 < dump_files.len() {
+                    if get_stem(dump_files[i].as_str()) == get_stem(dump_files[i + 1].as_str()) {
+                        dump_files.remove(i + 1);
+                        continue;
+                    }
+                    i += 1;
+                }
             }
         }
         Err(e) => {
