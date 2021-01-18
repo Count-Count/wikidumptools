@@ -134,7 +134,7 @@ async fn run() -> Result<()> {
         "list-wikis" => list_wikis(&client).await?,
 
         "list-dates" => {
-            // todo: check args: wiki name, handle optional type, handle no dump found condition,
+            // todo: check args: wiki name, handle optional type, handle no dump found condition
             let subcommand_matches = matches.subcommand_matches("list-dates").unwrap();
             list_dates(&client, subcommand_matches.value_of("wiki name").unwrap()).await?;
         }
@@ -156,7 +156,7 @@ async fn run() -> Result<()> {
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
             let dump_type = subcommand_matches.value_of("dump type").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
-            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible:  {}", e))?;
+            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?;
             download(
                 &client,
                 wiki,
