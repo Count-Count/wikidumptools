@@ -7,12 +7,14 @@
 use std::collections::BTreeMap;
 use std::io::Write;
 
+use mediawiki::media_wiki_error::MediaWikiError;
+
 #[derive(thiserror::Error, Debug)]
 enum WDGetError {
     #[error("Received invalid JSON data from Mediawiki")]
     InvalidJsonFromMediawiki(),
     #[error("Mediawiki API error: {0}")]
-    MediawikiError(#[from] Box<dyn std::error::Error>),
+    MediawikiError(#[from] MediaWikiError),
 }
 
 type Result<T> = std::result::Result<T, WDGetError>;
