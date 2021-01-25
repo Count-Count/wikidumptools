@@ -521,7 +521,7 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
             // check if prefix
             let dump_file_or_prefix_path = Path::new(dump_file_or_prefix);
             let parent_dir = dump_file_or_prefix_path.parent().map_or_else(
-                || Ok(std::env::current_dir().map_err(Error::CouldNotGetCurrentDir)?),
+                || std::env::current_dir().map_err(Error::CouldNotGetCurrentDir),
                 |path| Result::Ok(path.to_owned()),
             )?;
             if !parent_dir.is_dir() {
