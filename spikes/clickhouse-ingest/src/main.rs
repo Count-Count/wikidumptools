@@ -99,7 +99,7 @@ fn skip_to_end_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_na
     }
 }
 
-async fn process_stream<T: BufRead>(
+async fn process_stream<T: BufRead + Send>(
     buf_reader: &mut T,
     client: &mut ClientHandle,
     database_name: &str,

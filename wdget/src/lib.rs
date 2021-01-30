@@ -353,7 +353,7 @@ pub async fn download<T>(
     resume_partial: bool,
 ) -> Result<()>
 where
-    T: AsRef<Path>,
+    T: AsRef<Path> + Send,
 {
     let target_directory = target_directory.as_ref();
     if !target_directory.exists() {
