@@ -245,9 +245,9 @@ dependencies = [
  "chrono-tz",
  "clickhouse-rs",
  "env_logger",
+ "mimalloc",
  "quick-xml",
  "serde 1.0.123",
- "snmalloc-rs",
  "tokio",
 ]
 
@@ -979,6 +979,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1cca32fa0182e8c0989459524dc356b8f2b5c10f1b9eb521b7d182c03cf8c5ff"
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82151ff13433c4d403cb15d0e6fbda14b24d65bd1a5b33f7d52ec983cc00752d"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
 name = "linked-hash-map"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,6 +1086,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "157b4208e3059a8f9e78d559edc658e13df41410cb3ae03979c83130067fdd87"
 dependencies = [
  "autocfg 1.0.1",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a5d2c9cb18f9cdc6d88f4aca6d3d8ea89c4c8202d6facfc7e56efdee97b80fa"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]
@@ -1953,25 +1971,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 
 [[package]]
-name = "snmalloc-rs"
-version = "0.2.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ca2b691d643177b3cf6b3bc1660fa3c67c2597006ab7562127de095071a185b"
-dependencies = [
- "snmalloc-sys",
-]
-
-[[package]]
-name = "snmalloc-sys"
-version = "0.2.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fcd8358d1e04e4bad809685d49512cba2989871aa7ce223732f97f91501cb81"
-dependencies = [
- "cmake",
- "libc",
-]
-
-[[package]]
 name = "socket2"
 version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2547,11 +2546,11 @@ dependencies = [
  "clap 3.0.0-beta.2",
  "criterion",
  "memchr",
+ "mimalloc",
  "quick-xml",
  "rayon",
  "regex",
  "slice",
- "snmalloc-rs",
  "termcolor",
  "thiserror",
 ]
