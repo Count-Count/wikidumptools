@@ -6,3 +6,10 @@ members = [
     "spikes/update",
     "spikes/clickhouse-ingest"
     ]
+
+[profile.release]
+# minimize size of binaries
+#lto = "yes"
+#codegen-units = 1
+#opt-level = 'z' # possible s or 3 instead (benchmark!)
+#panic = 'abort'
