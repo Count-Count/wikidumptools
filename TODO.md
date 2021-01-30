@@ -3,6 +3,9 @@
 ## Short-term
 - refactor: main calls fn returning Result<()> for full control over dropping and exit code
 
+- set up benchmarking
+- benchmark mimalloc instead of snmalloc (much more widely used)
+
 ## Long-term
 - filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
 - search added/removed text?
