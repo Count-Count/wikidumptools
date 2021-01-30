@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-clickhouse-rs = { git = "https://github.com/Count-Count/clickhouse-rs.git", branch = "fix_ipv6_representation_and_update_tokio" }
+clickhouse-rs = "1.0.0-alpha.1"
 #clickhouse-rs = { path = "../../../clickhouse-rs", version = "0.2.0-alpha.5" }
 serde = { version = "1.0", features = [ "derive" ] }
 quick-xml = { version = "0.20", features = [ "serialize" ] }
