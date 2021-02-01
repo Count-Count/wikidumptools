@@ -341,16 +341,21 @@ fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool
     Ok(())
 }
 
+#[derive(Default)]
+pub struct DownloadOptions<'a> {
+    pub mirror: Option<&'a str>,
+    pub verbose: bool,
+    pub keep_partial: bool,
+    pub resume_partial: bool,
+}
+
 pub async fn download<T>(
     client: &Client,
     wiki: &str,
     date: &str,
     dump_type: &str,
-    mirror: Option<&str>,
     target_directory: T,
-    verbose: bool,
-    keep_partial: bool,
-    resume_partial: bool,
+    download_options: &DownloadOptions<'_>,
 ) -> Result<()>
 where
     T: AsRef<Path> + Send,
@@ -365,17 +370,17 @@ where
         return Err(WDGetError::DumpNotComplete());
     }
     let files = job_info.files.as_ref().ok_or(WDGetError::DumpHasNoFiles())?;
-    let root_url = mirror.unwrap_or("https://dumps.wikimedia.org");
+    let root_url = download_options.mirror.unwrap_or("https://dumps.wikimedia.org");
     for (file_name, file_data) in files {
         let mut target_file_pathbuf = target_directory.to_owned();
         target_file_pathbuf.push(&file_name);
         let target_file_path = target_file_pathbuf.as_path();
         if target_file_pathbuf.exists() {
-            check_existing_file(target_file_path, file_data, verbose)?;
+            check_existing_file(target_file_path, file_data, download_options.verbose)?;
             continue;
         }
         let partfile_name = create_partfile_path(target_file_path);
-        if resume_partial && Path::new(&partfile_name).exists() {
+        if download_options.resume_partial && Path::new(&partfile_name).exists() {
             let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
                 WDGetError::DumpFileAccessError(
                     partfile_name.clone(),
@@ -403,8 +408,16 @@ where
             todo!();
         }
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
-        let download_res = download_file(&url, target_file_path, &partfile_name, file_data, client, verbose).await;
-        if !keep_partial && download_res.is_err() && Path::new(&partfile_name).is_file() {
+        let download_res = download_file(
+            &url,
+            target_file_path,
+            &partfile_name,
+            file_data,
+            client,
+            download_options.verbose,
+        )
+        .await;
+        if !download_options.keep_partial && download_res.is_err() && Path::new(&partfile_name).is_file() {
             remove_file(&partfile_name)
                 .or_else::<(), _>(|err| {
                     eprintln!("Could not remove {}: {}", partfile_name.display(), &err);

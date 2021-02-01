@@ -157,18 +157,13 @@ async fn run() -> Result<()> {
             let dump_type = subcommand_matches.value_of("dump type").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
             let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?;
-            download(
-                &client,
-                wiki,
-                &date,
-                dump_type,
-                subcommand_matches.value_of("mirror"),
-                current_dir,
-                matches.is_present("verbose"),
-                false,
-                false,
-            )
-            .await?
+            let download_options = DownloadOptions {
+                mirror: subcommand_matches.value_of("mirror"),
+                verbose: matches.is_present("verbose"),
+                keep_partial: false,
+                resume_partial: false,
+            };
+            download(&client, wiki, &date, dump_type, current_dir, &download_options).await?
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }
