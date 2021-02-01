@@ -179,6 +179,7 @@ pub struct SearchOptions<'a> {
     options_bzcat: &'a [&'a str],
     color_choice: ColorChoice,
 }
+
 impl<'a> SearchOptions<'a> {
     #[must_use]
     pub const fn new() -> SearchOptions<'a> {
@@ -226,6 +227,7 @@ impl<'a> SearchOptions<'a> {
         self
     }
 }
+
 impl<'a> Default for SearchOptions<'a> {
     fn default() -> Self {
         SearchOptions::new()
