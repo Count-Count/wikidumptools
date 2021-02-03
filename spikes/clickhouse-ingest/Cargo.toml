@@ -8,18 +8,12 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-clickhouse-rs = "1.0.0-alpha.1"
-#clickhouse-rs = { path = "../../../clickhouse-rs", version = "0.2.0-alpha.5" }
+#clickhouse-rs = "1.0.0-alpha.1"
+clickhouse-rs = { git = "https://github.com/Count-Count/clickhouse-rs.git", branch = "chrono-no-oldtime" }
 serde = { version = "1.0", features = [ "derive" ] }
 quick-xml = { version = "0.20", features = [ "serialize" ] }
 tokio = { version = "1.0", features = ["full"] }
 env_logger = "0.8"
+chrono = { version = "0.4", default-features = false, features = [ "std" ] }
 chrono-tz = "0.5"
-
-[dependencies.chrono]
-version = "0.4"
-default-features = false
-
-[dependencies.snmalloc-rs]
-version = "0.2.24"
-features = [] # stats, debug, ...
+snmalloc-rs = { version = "0.2.24", features = [] } # features can be: stats, debug, ...
