@@ -155,11 +155,8 @@ version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
 dependencies = [
- "libc",
  "num-integer",
  "num-traits 0.2.14",
- "time 0.1.43",
- "winapi",
 ]
 
 [[package]]
@@ -233,8 +230,7 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs"
 version = "1.0.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41edeaeac73a2f3c39357e5dd42a08c2d41fbc5b85c35a76879dc10d87128010"
+source = "git+https://github.com/Count-Count/clickhouse-rs.git?branch=chrono-no-oldtime#4658f20914ea0ea0d1ef14caf51d0db25df76730"
 dependencies = [
  "byteorder",
  "chrono",
@@ -249,7 +245,7 @@ dependencies = [
  "lazy_static",
  "log",
  "lz4",
- "pin-project 1.0.4",
+ "pin-project 1.0.5",
  "thiserror",
  "tokio",
  "url",
@@ -259,8 +255,7 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs-cityhash-sys"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4baf9d4700a28d6cb600e17ed6ae2b43298a5245f1f76b4eab63027ebfd592b9"
+source = "git+https://github.com/Count-Count/clickhouse-rs.git?branch=chrono-no-oldtime#4658f20914ea0ea0d1ef14caf51d0db25df76730"
 dependencies = [
  "cc",
 ]
@@ -322,7 +317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "784ad0fbab4f3e9cef09f20e0aea6000ae08d2cb98ac4c0abc53df18803d702f"
 dependencies = [
  "percent-encoding",
- "time 0.2.25",
+ "time",
  "version_check",
 ]
 
@@ -338,7 +333,7 @@ dependencies = [
  "publicsuffix",
  "serde 1.0.123",
  "serde_json",
- "time 0.2.25",
+ "time",
  "url",
 ]
 
@@ -842,7 +837,7 @@ dependencies = [
  "httparse",
  "httpdate",
  "itoa",
- "pin-project 1.0.4",
+ "pin-project 1.0.5",
  "socket2",
  "tokio",
  "tower-service",
@@ -1280,11 +1275,11 @@ dependencies = [
 
 [[package]]
 name = "pin-project"
-version = "1.0.4"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95b70b68509f17aa2857863b6fa00bf21fc93674c7a8893de2f469f6aa7ca2f2"
+checksum = "96fa8ebb90271c4477f144354485b8068bd8f6b78b428b01ba892ca26caf0b63"
 dependencies = [
- "pin-project-internal 1.0.4",
+ "pin-project-internal 1.0.5",
 ]
 
 [[package]]
@@ -1300,9 +1295,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-internal"
-version = "1.0.4"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "caa25a6393f22ce819b0f50e0be89287292fda8d425be38ee0ca14c4931d9e71"
+checksum = "758669ae3558c6f74bd2a18b41f7ac0b5a195aea6639d6a9b5e5d1ad5ba24c0b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1697,7 +1692,7 @@ dependencies = [
  "serde 1.0.123",
  "serde_json",
  "serde_urlencoded",
- "time 0.2.25",
+ "time",
  "tokio",
  "tokio-native-tls",
  "url",
@@ -2116,16 +2111,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8208a331e1cb318dd5bd76951d2b8fc48ca38a69f5f4e4af1b6a9f8c6236915"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "time"
-version = "0.1.43"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
