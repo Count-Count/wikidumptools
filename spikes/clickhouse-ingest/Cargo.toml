@@ -17,5 +17,5 @@ env_logger = "0.8"
 chrono = "0.4"
 chrono-tz = "0.5"
 [dependencies.snmalloc-rs]
-version = "0.2"
+version = "0.2.24"
 features = [] # stats, debug, ...
