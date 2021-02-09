@@ -19,7 +19,7 @@ use std::time::Instant;
 use tokio::time;
 
 #[derive(thiserror::Error, Debug)]
-pub enum WDGetError {
+pub enum Error {
     #[error("Network I/O error {0}")]
     HttpError(#[from] reqwest::Error),
     #[error("Error parsing JSON: {0}")]
@@ -46,7 +46,7 @@ pub enum WDGetError {
     TargetDirectoryDoesNotExist(PathBuf),
 }
 
-type Result<T> = std::result::Result<T, WDGetError>;
+type Result<T> = std::result::Result<T, Error>;
 
 pub struct Wiki {
     pub id: String,
@@ -74,14 +74,14 @@ pub async fn get_available_wikis_from_wikidata(client: &Client) -> Result<Vec<Wi
     let json: serde_json::Value = serde_json::from_str(body.as_str())?;
     let bindings = json["results"]["bindings"]
         .as_array()
-        .ok_or(WDGetError::InvalidJsonFromWikidata())?;
+        .ok_or(Error::InvalidJsonFromWikidata())?;
     for binding in bindings {
         let id = binding["id"]["value"]
             .as_str()
-            .ok_or(WDGetError::InvalidJsonFromWikidata())?;
+            .ok_or(Error::InvalidJsonFromWikidata())?;
         let label = binding["itemLabel"]["value"]
             .as_str()
-            .ok_or(WDGetError::InvalidJsonFromWikidata())?;
+            .ok_or(Error::InvalidJsonFromWikidata())?;
         if !blacklist.contains(&id) {
             wikis.push(Wiki {
                 id: id.to_owned(),
@@ -117,9 +117,9 @@ pub async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<
     let url = format!("https://dumps.wikimedia.org/{}/{}/dumpstatus.json", wiki, date);
     let r = client.get(url.as_str()).send().await?.error_for_status().map_err(|e| {
         if let Some(StatusCode::NOT_FOUND) = e.status() {
-            WDGetError::DumpStatusFileNotFound()
+            Error::DumpStatusFileNotFound()
         } else {
-            WDGetError::from(e)
+            Error::from(e)
         }
     })?;
     let body = r.text().await?;
@@ -145,11 +145,11 @@ pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: O
                     return Ok(date.to_owned());
                 }
             }
-            Err(WDGetError::DumpStatusFileNotFound()) => continue,
+            Err(Error::DumpStatusFileNotFound()) => continue,
             Err(e) => return Err(e),
         }
     }
-    return Err(WDGetError::NoDumpDatesFound());
+    return Err(Error::NoDumpDatesFound());
 }
 
 fn get_file_name_expect(file_path: &Path) -> &str {
@@ -187,7 +187,7 @@ async fn download_file(
         .write(true)
         .open(&partfile_path)
         .map_err(|e| {
-            WDGetError::DumpFileAccessError(
+            Error::DumpFileAccessError(
                 partfile_path.to_owned(),
                 std::format!("Could not create part file: {0}", e),
             )
@@ -207,7 +207,7 @@ async fn download_file(
             chunk = r.chunk() => {
                 if let Some(chunk) = chunk? {
                     partfile.write_all(chunk.as_ref()).map_err(|e| {
-                        WDGetError::DumpFileAccessError(
+                        Error::DumpFileAccessError(
                             partfile_path.to_owned(),
                             std::format!("Write error: {0}", e),
                         )
@@ -247,12 +247,12 @@ async fn download_file(
                 }
             },
             _ = tokio::signal::ctrl_c() => {
-                return Err(WDGetError::AbortedByUser());
+                return Err(Error::AbortedByUser());
             }
         };
     }
     std::fs::rename(&partfile_path, &file_name).map_err(|e| {
-        WDGetError::DumpFileAccessError(
+        Error::DumpFileAccessError(
             partfile_path.to_owned(),
             std::format!("Could not rename part file: {0}", e),
         )
@@ -275,14 +275,14 @@ async fn download_file(
 fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
     let file_name = get_file_name_expect(file_path);
     let file_metadata = fs::metadata(file_path).map_err(|e| {
-        WDGetError::DumpFileAccessError(
+        Error::DumpFileAccessError(
             file_path.to_owned(),
             std::format!("Could not get file information: {0}", e),
         )
     })?;
     if let Some(expected_file_size) = &file_data.size {
         if *expected_file_size != file_metadata.len() {
-            return Err(WDGetError::DumpFileAccessError(
+            return Err(Error::DumpFileAccessError(
                 file_path.to_owned(),
                 std::format!(
                     "Dump file already exists, but its size does not match the expected size. Expected: {}, actual: {}.",
@@ -294,10 +294,7 @@ fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool
     match file_data.sha1.as_ref() {
         Some(expected_sha1) => {
             let mut file = fs::File::open(file_path).map_err(|e| {
-                WDGetError::DumpFileAccessError(
-                    file_path.to_owned(),
-                    std::format!("Could not read mapping file: {}", e),
-                )
+                Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {}", e))
             })?;
             if verbose {
                 eprint!("Verifying {}...", file_name);
@@ -306,15 +303,12 @@ fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool
             let start_time = Instant::now();
             let mut hasher = Sha1::new();
             let hashed_bytes = std::io::copy(&mut file, &mut hasher).map_err(|e| {
-                WDGetError::DumpFileAccessError(
-                    file_path.to_owned(),
-                    std::format!("Could not read mapping file: {}", e),
-                )
+                Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {}", e))
             })?;
             let sha1_bytes = hasher.finalize();
             let actual_sha1 = format!("{:x}", sha1_bytes);
             if expected_sha1 != &actual_sha1 {
-                return Err(WDGetError::DumpFileAccessError(
+                return Err(Error::DumpFileAccessError(
                     file_path.to_owned(),
                     "File already exists but the SHA1 digest differs from the expected one.".to_owned(),
                 ));
@@ -362,14 +356,14 @@ where
 {
     let target_directory = target_directory.as_ref();
     if !target_directory.exists() {
-        return Err(WDGetError::TargetDirectoryDoesNotExist(target_directory.to_owned()));
+        return Err(Error::TargetDirectoryDoesNotExist(target_directory.to_owned()));
     }
     let dump_status = get_dump_status(client, wiki, date).await?;
-    let job_info = dump_status.jobs.get(dump_type).ok_or(WDGetError::DumpTypeNotFound())?;
+    let job_info = dump_status.jobs.get(dump_type).ok_or(Error::DumpTypeNotFound())?;
     if &job_info.status != "done" {
-        return Err(WDGetError::DumpNotComplete());
+        return Err(Error::DumpNotComplete());
     }
-    let files = job_info.files.as_ref().ok_or(WDGetError::DumpHasNoFiles())?;
+    let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     let root_url = download_options.mirror.unwrap_or("https://dumps.wikimedia.org");
     for (file_name, file_data) in files {
         let mut target_file_pathbuf = target_directory.to_owned();
@@ -382,20 +376,20 @@ where
         let partfile_name = create_partfile_path(target_file_path);
         if download_options.resume_partial && Path::new(&partfile_name).exists() {
             let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
-                WDGetError::DumpFileAccessError(
+                Error::DumpFileAccessError(
                     partfile_name.clone(),
                     std::format!("Could not get file information: {0}", e),
                 )
             })?;
             if !partfile_metadata.is_file() {
-                return Err(WDGetError::DumpFileAccessError(
+                return Err(Error::DumpFileAccessError(
                     partfile_name.clone(),
                     "Expected regular file".to_owned(),
                 ));
             }
             let part_len = partfile_metadata.len();
             if file_data.size.is_some() && part_len > file_data.size.unwrap() {
-                return Err(WDGetError::DumpFileAccessError(
+                return Err(Error::DumpFileAccessError(
                     partfile_name.clone(),
                     std::format!(
                         "Existing part file is longer than expected: {0} > {1}",
@@ -445,7 +439,7 @@ pub async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<Stri
         }
     }
     if dates.is_empty() {
-        return Err(WDGetError::NoDumpDatesFound());
+        return Err(Error::NoDumpDatesFound());
     }
     dates.sort_unstable();
     Ok(dates)

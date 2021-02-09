@@ -71,7 +71,7 @@ async fn check_date_may_retrieve_latest(
         if RE.is_match(date_spec) {
             Ok(date_spec.to_owned())
         } else {
-            Err(anyhow::Error::from(WDGetError::InvalidDumpDate()))
+            Err(anyhow::Error::from(Error::InvalidDumpDate()))
         }
     }
 }

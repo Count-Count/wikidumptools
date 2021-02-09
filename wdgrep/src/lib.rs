@@ -83,7 +83,7 @@ where
 
 enum SkipToStartTagOrEofResult {
     StartTagFound,
-    EOF,
+    Eof,
 }
 
 #[inline(always)]
@@ -101,7 +101,7 @@ fn skip_to_start_tag_or_eof<T: BufRead>(
                 return Err(Error::UnexpectedEmptyTag(from_utf8(tag_name)?.to_owned()));
             }
             Event::Eof => {
-                return Ok(SkipToStartTagOrEofResult::EOF);
+                return Ok(SkipToStartTagOrEofResult::Eof);
             }
             _other_event => {}
         }
@@ -111,7 +111,7 @@ fn skip_to_start_tag_or_eof<T: BufRead>(
 
 #[inline(always)]
 fn skip_to_start_tag<T: BufRead>(reader: &mut Reader<T>, buf: &mut Vec<u8>, tag_name: &[u8]) -> Result<()> {
-    if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(reader, buf, tag_name)? {
+    if let SkipToStartTagOrEofResult::Eof = skip_to_start_tag_or_eof(reader, buf, tag_name)? {
         return Err(Error::Xml(quick_xml::Error::UnexpectedEof(
             from_utf8(tag_name)?.to_owned(),
         )));
@@ -361,7 +361,7 @@ fn search_dump_reader<B: BufRead>(
     let mut stdout_buffer = stdout_writer.buffer();
 
     loop {
-        if let SkipToStartTagOrEofResult::EOF = skip_to_start_tag_or_eof(&mut reader, &mut buf, b"page")? {
+        if let SkipToStartTagOrEofResult::Eof = skip_to_start_tag_or_eof(&mut reader, &mut buf, b"page")? {
             break;
         }
         let page_tag_start_pos = reader.buffer_position() as u64 + start - b"<page>".len() as u64;

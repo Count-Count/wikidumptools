@@ -10,14 +10,14 @@ use std::io::Write;
 use mediawiki::media_wiki_error::MediaWikiError;
 
 #[derive(thiserror::Error, Debug)]
-enum WDGetError {
+enum Error {
     #[error("Received invalid JSON data from Mediawiki")]
     InvalidJsonFromMediawiki(),
     #[error("Mediawiki API error: {0}")]
     MediawikiError(#[from] MediaWikiError),
 }
 
-type Result<T> = std::result::Result<T, WDGetError>;
+type Result<T> = std::result::Result<T, Error>;
 
 struct WikiCredentials<'a> {
     username: &'a str,
@@ -33,7 +33,7 @@ async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
     let res = api.get_query_api_json_all(&params).await?;
     let apihighlimits = res["query"]["userinfo"]["rights"]
         .as_array()
-        .ok_or(WDGetError::InvalidJsonFromMediawiki())?
+        .ok_or(Error::InvalidJsonFromMediawiki())?
         .iter()
         .any(|val| val.as_str() == Some("apihighlimits"));
     let rc_per_batch = if apihighlimits { 5000 } else { 500 };
@@ -54,12 +54,12 @@ async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
     // capture: moved pages, deleted pages, restored pages specially
     for val in res["query"]["recentchanges"]
         .as_array()
-        .ok_or(WDGetError::InvalidJsonFromMediawiki())?
+        .ok_or(Error::InvalidJsonFromMediawiki())?
     {
         match val["type"].as_str() {
             Some("new") | Some("edit") => {
-                let pageid = val["pageid"].as_u64().ok_or(WDGetError::InvalidJsonFromMediawiki())?;
-                let revid = val["revid"].as_u64().ok_or(WDGetError::InvalidJsonFromMediawiki())?;
+                let pageid = val["pageid"].as_u64().ok_or(Error::InvalidJsonFromMediawiki())?;
+                let revid = val["revid"].as_u64().ok_or(Error::InvalidJsonFromMediawiki())?;
                 page_to_last_revision.entry(pageid).or_insert(revid);
                 rev_count += 1;
             }
