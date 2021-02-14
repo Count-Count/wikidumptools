@@ -16,9 +16,14 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::str::from_utf8;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
+
+#[inline(always)]
+fn from_utf8(v: &[u8]) -> Result<&str> {
+    std::str::from_utf8(v).map_err(Error::Utf8)
+    // unsafe { Ok(from_utf8_unchecked(v)) }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -311,7 +316,7 @@ pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOp
                 } else {
                     Err(Error::SubCommandTerminatedUnsuccessfully(
                         res.status,
-                        from_utf8_unsafe(res.stderr.as_ref())?.to_owned(),
+                        from_utf8(res.stderr.as_ref())?.to_owned(),
                     ))
                 }
             } else {
@@ -546,10 +551,13 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // check if prefix
             let dump_file_or_prefix_path = Path::new(dump_file_or_prefix);
-            let parent_dir = dump_file_or_prefix_path.parent().filter(|path| !path.as_os_str().is_empty()).map_or_else(
-                || std::env::current_dir().map_err(Error::CouldNotGetCurrentDir),
-                |path| Result::Ok(path.to_owned()),
-            )?;
+            let parent_dir = dump_file_or_prefix_path
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .map_or_else(
+                    || std::env::current_dir().map_err(Error::CouldNotGetCurrentDir),
+                    |path| Result::Ok(path.to_owned()),
+                )?;
             if !parent_dir.is_dir() {
                 return Err(Error::DumpFileOrPrefixInvalid());
             }
