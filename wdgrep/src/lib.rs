@@ -234,83 +234,107 @@ impl<'a> Default for SearchOptions<'a> {
     }
 }
 
+pub fn is_compressed(file: &str) -> bool {
+    file.ends_with(".7z") || file.ends_with(".bz2")
+}
+
 pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOptions) -> Result<SearchDumpResult> {
+    let single_threaded = search_options.thread_count.filter(|t| t.get() == 1).is_some();
     if let Some(thread_count) = search_options.thread_count {
-        ThreadPoolBuilder::new()
-            .num_threads(thread_count.get())
-            .build_global()
-            .unwrap();
+        if thread_count.get() > 1 {
+            ThreadPoolBuilder::new()
+                .num_threads(thread_count.get())
+                .build_global()
+                .unwrap();
+        }
     }
     let re = RegexBuilder::new(regex).build()?;
     let stdout_writer = BufferWriter::stdout(search_options.color_choice);
     let bytes_processed = AtomicU64::new(0);
     let compressed_file_found = AtomicBool::new(false);
-    dump_files.into_par_iter().try_for_each(|dump_file| {
-        let dump_file: &str = dump_file.as_ref();
-        if dump_file.ends_with(".7z") || dump_file.ends_with(".bz2") {
-            let mut command;
-            if dump_file.ends_with(".7z") {
-                command = Command::new(search_options.binary_7z);
-                command.args(search_options.options_7z);
-            } else {
-                command = Command::new(search_options.binary_bzcat);
-                command.args(search_options.options_bzcat);
-            };
-            // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
-            command.stderr(Stdio::piped()).stdin(Stdio::piped());
 
-            let mut handle = command
-                .arg(dump_file)
-                .stdout(Stdio::piped())
-                .spawn()
-                .map_err(Error::SubCommandCouldNotBeStarted)?;
-            let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
-            let buf_size = 2 * 1024 * 1024;
-            let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
-            let search_res = search_dump_reader(
+    if single_threaded && !dump_files.as_ref().iter().map(String::as_ref).any(is_compressed) {
+        // don't use rayon when single-threaded and reading plain files
+        for dump_file in dump_files {
+            let bytes_processed_0 = search_dump_part(
                 &stdout_writer,
                 &re,
-                &mut buf_reader,
+                dump_file,
                 0,
                 u64::MAX,
                 search_options.restrict_namespaces,
                 search_options.only_print_title,
-            );
-            if search_res.is_err() {
-                eprintln!("Error searching {}", dump_file);
-            }
-            let bytes_processed_0 = search_res?;
-            compressed_file_found.fetch_or(true, Ordering::Relaxed);
+            )?;
             bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
-            let res = handle.wait_with_output()?; // needed since stderr is piped
-            if res.status.success() {
-                Ok(())
-            } else {
-                Err(Error::SubCommandTerminatedUnsuccessfully(
-                    res.status,
-                    from_utf8(res.stderr.as_ref())?.to_owned(),
-                ))
-            }
-        } else {
-            let len = metadata(dump_file)?.len();
-            let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
-            let slice_size = ceiling_div(len, parts); // make sure to read to end
+        }
+    } else {
+        dump_files.into_par_iter().try_for_each(|dump_file| {
+            let dump_file: &str = dump_file.as_ref();
+            if is_compressed(dump_file) {
+                let mut command;
+                if dump_file.ends_with(".7z") {
+                    command = Command::new(search_options.binary_7z);
+                    command.args(search_options.options_7z);
+                } else {
+                    command = Command::new(search_options.binary_bzcat);
+                    command.args(search_options.options_bzcat);
+                };
+                // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
+                command.stderr(Stdio::piped()).stdin(Stdio::piped());
 
-            (0..parts).into_par_iter().try_for_each(|i| {
-                let bytes_processed_0 = search_dump_part(
+                let mut handle = command
+                    .arg(dump_file)
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .map_err(Error::SubCommandCouldNotBeStarted)?;
+                let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
+                let buf_size = 2 * 1024 * 1024;
+                let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
+                let search_res = search_dump_reader(
                     &stdout_writer,
                     &re,
-                    dump_file,
-                    i * slice_size,
-                    (i + 1) * slice_size,
+                    &mut buf_reader,
+                    0,
+                    u64::MAX,
                     search_options.restrict_namespaces,
                     search_options.only_print_title,
-                )?;
+                );
+                if search_res.is_err() {
+                    eprintln!("Error searching {}", dump_file);
+                }
+                let bytes_processed_0 = search_res?;
+                compressed_file_found.fetch_or(true, Ordering::Relaxed);
                 bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
-                Ok(())
-            })
-        }
-    })?;
+                let res = handle.wait_with_output()?; // needed since stderr is piped
+                if res.status.success() {
+                    Ok(())
+                } else {
+                    Err(Error::SubCommandTerminatedUnsuccessfully(
+                        res.status,
+                        from_utf8_unsafe(res.stderr.as_ref())?.to_owned(),
+                    ))
+                }
+            } else {
+                let len = metadata(dump_file)?.len();
+                let parts = ceiling_div(len, 500 * 1024 * 1024); // parts are at most 500 MiB
+                let slice_size = ceiling_div(len, parts); // make sure to read to end
+
+                (0..parts).into_par_iter().try_for_each(|i| {
+                    let bytes_processed_0 = search_dump_part(
+                        &stdout_writer,
+                        &re,
+                        dump_file,
+                        i * slice_size,
+                        (i + 1) * slice_size,
+                        search_options.restrict_namespaces,
+                        search_options.only_print_title,
+                    )?;
+                    bytes_processed.fetch_add(bytes_processed_0, Ordering::Relaxed);
+                    Ok(())
+                })
+            }
+        })?;
+    }
 
     Ok(SearchDumpResult {
         bytes_processed: bytes_processed.load(Ordering::Relaxed),
