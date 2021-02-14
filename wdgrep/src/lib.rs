@@ -522,7 +522,7 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // check if prefix
             let dump_file_or_prefix_path = Path::new(dump_file_or_prefix);
-            let parent_dir = dump_file_or_prefix_path.parent().map_or_else(
+            let parent_dir = dump_file_or_prefix_path.parent().filter(|path| !path.as_os_str().is_empty()).map_or_else(
                 || std::env::current_dir().map_err(Error::CouldNotGetCurrentDir),
                 |path| Result::Ok(path.to_owned()),
             )?;
