@@ -22,7 +22,7 @@ use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor}
 #[inline(always)]
 fn from_utf8(v: &[u8]) -> Result<&str> {
     std::str::from_utf8(v).map_err(Error::Utf8)
-    // unsafe { Ok(from_utf8_unchecked(v)) }
+    // unsafe { Ok(std::str::from_utf8_unchecked(v)) }
 }
 
 #[derive(thiserror::Error, Debug)]
