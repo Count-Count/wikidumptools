@@ -22,7 +22,7 @@ features = [] # stats, debug, ...
 
 [dev-dependencies]
 criterion = "0.3"
-bzip2 = "0.4.1"
+bzip2 = "0.4.2"
 slice = "0.0.4"
 
 [[bench]]
