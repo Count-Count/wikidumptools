@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 tokio = { version = "1.0", features = ["rt", "macros", "time", "signal"] }
-thiserror = "1.0.20"
+thiserror = "1.0.24"
 mediawiki = "0.2.3"
