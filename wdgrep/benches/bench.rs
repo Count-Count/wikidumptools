@@ -4,15 +4,14 @@
 //
 // Distributed under the terms of the MIT license.
 
-use criterion::*;
-use slice::IoSlice;
-use std::env;
-use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::thread;
 use std::time::Duration;
+use std::{env, fs, thread};
+
+use criterion::*;
+use slice::IoSlice;
 use wikidumpgrep::{search_dump, SearchOptions};
 
 pub fn criterion_benchmark_file_reading(c: &mut Criterion) {

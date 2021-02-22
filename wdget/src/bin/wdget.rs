@@ -4,14 +4,14 @@
 //
 // Distributed under the terms of the MIT license.
 
-use anyhow::anyhow;
-use anyhow::Result;
+use std::env::current_dir;
+use std::process;
+
+use anyhow::{anyhow, Result};
 use clap::{App, AppSettings, Arg};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
-use std::env::current_dir;
-use std::process;
 use termcolor::ColorChoice;
 use wikidumpget::*;
 

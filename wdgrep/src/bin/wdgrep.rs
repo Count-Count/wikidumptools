@@ -4,11 +4,12 @@
 //
 // Distributed under the terms of the MIT license.
 
-use clap::{App, AppSettings, Arg};
 use std::io::Write;
 use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
+
+use clap::{App, AppSettings, Arg};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 

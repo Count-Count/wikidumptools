@@ -1,20 +1,20 @@
-use anyhow::anyhow;
-use anyhow::Result;
-use chrono::DateTime;
-use chrono_tz::Tz;
-use clickhouse_rs::ClientHandle;
-use clickhouse_rs::{row, types::Block, Pool};
-use env::VarError;
-use quick_xml::de::Deserializer;
-use quick_xml::DeError;
-use quick_xml::{events::Event, Reader};
-use serde::Deserialize;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::from_utf8;
+
+use anyhow::{anyhow, Result};
+use chrono::DateTime;
+use chrono_tz::Tz;
+use clickhouse_rs::types::Block;
+use clickhouse_rs::{row, ClientHandle, Pool};
+use env::VarError;
+use quick_xml::de::Deserializer;
+use quick_xml::events::Event;
+use quick_xml::{DeError, Reader};
+use serde::Deserialize;
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
