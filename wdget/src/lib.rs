@@ -4,18 +4,19 @@
 //
 // Distributed under the terms of the MIT license.
 
-use fs::remove_file;
-use lazy_static::lazy_static;
-use regex::Regex;
-use reqwest::{Client, StatusCode};
-use serde::Deserialize;
-use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+use fs::remove_file;
+use lazy_static::lazy_static;
+use regex::Regex;
+use reqwest::{Client, StatusCode};
+use serde::Deserialize;
+use sha1::{Digest, Sha1};
 use tokio::time;
 
 #[derive(thiserror::Error, Debug)]

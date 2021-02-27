@@ -1,38 +1,51 @@
 # TODO
 
-## Short-term
-- refactor: main calls fn returning Result<()> for full control over dropping and exit code
+## High prio
 
+### wdet:
+- --decompress
+- mirror-list
+- better downloading stats (percentage complete) with ETA
+
+### wdgrep
+- ci, more tests, coverage
 - set up benchmarking
-- benchmark mimalloc instead of snmalloc (much more widely used)
+- README.md
+- filter by title: --intitle
 
 ## Long-term
-- filter by title, user, comment, minor, timestamp (between, before, after, --as-of)
-- search added/removed text?
+- refactor: main calls fn returning Result<()> for full control over dropping and exit code
+- benchmark mimalloc instead of snmalloc (much more widely used)
+- search progress display
 - parse siteinfo and allow passing namespaces by name?
 - print match statistics (how many matches in how many articles, percentage of pages matching, ...)
-- check passed namespaces and allow textual namespace specification
-- README.md
 - output formats: normal, csv, json, wikitext
-- for text output: one-line-per-match
-- ci, more tests
-- optimize: use less processes with 7z?
-- optimize: disable 7z multi-threading?
-- make use of index and parallelize single-file bzip2 extraction by using multi-streams
-- make use of index when bzip2 searching with --intitle
-- 10MiB 7z test file in repo for tests and benchmarks
 - only print matches
+- for text output: one-line-per-match as an option
+- benchmark: use less processes with 7z?
+- benchmark (Windows): disable 7z multi-threading?
 - print captured groups, maybe also s/../../
+- kib/mib/gib, hh:mm:ss
+- clap_generate
+- use (color-)eyre instead of anyhow for backtraces
+
+### Full dump only improvements
+- only useful for full dump: filter by user, comment, minor, timestamp (between, before, after, --as-of)
+- search added/removed text?
+
 
 ## A man can dream...
 - Aarch64 Neon memchr implementation
 - non-copying XML parser
+- SIMD UTF-8
 
 ## Abandonded ideas
 - show performance statistics on break too
-- progress display
+- make use of index and parallelize single-file bzip2 extraction by using multi-streams (abandoned: bzip2 too slow in any case, no need to waste time on it)
+- make use of index when bzip2 searching with --intitle (abandoned: bzip2 too slow in any case, no need to waste time on it)
 
 ## wdget
+- -d/--decompress option
 - mirror list/shortcut
 - two-line progress text to avoid terminal overflow at normal widths
 - progress: show ETA?
@@ -51,5 +64,6 @@
 - tests?
 
 ## further ideas:
+- dump update into wdget or wdupdate
 - wdcat, wdls
 - better error handling

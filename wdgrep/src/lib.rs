@@ -4,12 +4,6 @@
 //
 // Distributed under the terms of the MIT license.
 
-use memchr::{memchr, memrchr};
-use quick_xml::events::Event;
-use quick_xml::Reader;
-use rayon::prelude::*;
-use rayon::ThreadPoolBuilder;
-use regex::{Regex, RegexBuilder};
 use std::fs;
 use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
@@ -17,6 +11,13 @@ use std::num::NonZeroUsize;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+use memchr::{memchr, memrchr};
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
+use regex::{Regex, RegexBuilder};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[inline(always)]
