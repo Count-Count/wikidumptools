@@ -24,6 +24,8 @@ jobs:
           override: true
     - name: Build
       run: cargo build --verbose
+    - name: Clone testfiles
+      run: git clone https://github.com/Count-Count/wikidumptools-testfiles.git testfiles
     - name: Run tests
       run: cargo test --verbose
   clippy_check:
