@@ -3,7 +3,7 @@
 ## High prio
 
 ### wdet:
-- --decompress
+- -d/--decompress
 - mirror-list
 - better downloading stats (percentage complete) with ETA
 
@@ -28,6 +28,7 @@
 - kib/mib/gib, hh:mm:ss
 - clap_generate
 - use (color-)eyre instead of anyhow for backtraces
+- support multiple regex engines/regex engine switching
 
 ### Full dump only improvements
 - only useful for full dump: filter by user, comment, minor, timestamp (between, before, after, --as-of)
