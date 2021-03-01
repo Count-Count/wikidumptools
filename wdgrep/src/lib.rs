@@ -611,46 +611,55 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
 mod tests {
     use super::*;
 
-    #[test]
-    #[allow(clippy::trivial_regex)]
-    fn test_print() {
-        let stdout_writer = BufferWriter::stdout(ColorChoice::Auto);
+    fn get_find_in_text_ansi_result(text: &str, pattern: &str) -> String {
+        let stdout_writer = BufferWriter::stdout(ColorChoice::AlwaysAnsi);
         let mut stdout_buffer = stdout_writer.buffer();
         find_in_text(
             &mut stdout_buffer,
             "title",
             "revision_id",
-            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
-            &RegexBuilder::new("Abc").build().unwrap(),
+            text,
+            &RegexBuilder::new(pattern).build().unwrap(),
         );
-        find_in_text(
-            &mut stdout_buffer,
-            "title",
-            "revision_id",
-            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz",
-            &RegexBuilder::new("^").build().unwrap(),
+        // stdout_writer.print(&stdout_buffer).unwrap();
+        std::str::from_utf8(stdout_buffer.as_slice())
+            .expect("Output is not UTF-8")
+            .to_owned()
+    }
+
+    #[test]
+    #[allow(clippy::trivial_regex)]
+    fn test_print() {
+        let text = "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n";
+        assert_eq!(get_find_in_text_ansi_result(text, "Abc"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0m\u{1b}[0m\u{1b}[31mAbc\u{1b}[0m Xyz \u{1b}[0m\u{1b}[31mAbc\u{1b}[0m Xyz\n\u{1b}[0m\u{1b}[31mAbc\u{1b}[0m Xyz \u{1b}[0m\u{1b}[31mAbc\u{1b}[0m Xyz\n\n"
         );
-        find_in_text(
-            &mut stdout_buffer,
-            "title",
-            "revision_id",
-            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
-            &RegexBuilder::new("Xyz\n").build().unwrap(),
+        assert_eq!(get_find_in_text_ansi_result(text, "^"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0m\u{1b}[0m\u{1b}[31m\u{1b}[0mAbc Xyz Abc Xyz\n\n"
         );
-        find_in_text(
-            &mut stdout_buffer,
-            "title",
-            "revision_id",
-            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
-            &RegexBuilder::new("\n").build().unwrap(),
+        assert_eq!(get_find_in_text_ansi_result(text, "Xyz\\n"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0mAbc Xyz Abc \u{1b}[0m\u{1b}[31mXyz\u{1b}[0m\nAbc Xyz Abc \u{1b}[0m\u{1b}[31mXyz\u{1b}[0m\n\n"
         );
-        find_in_text(
-            &mut stdout_buffer,
-            "title",
-            "revision_id",
-            "Abc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\n",
-            &RegexBuilder::new("123").build().unwrap(),
+        assert_eq!(
+            get_find_in_text_ansi_result(text, "\\n"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0mAbc Xyz Abc Xyz\u{1b}[0m\u{1b}[31m\u{1b}[0m\n123 456\u{1b}[0m\u{1b}[31m\u{1b}[0m\nAbc Xyz Abc Xyz\u{1b}[0m\u{1b}[31m\u{1b}[0m\n\n"
         );
-        stdout_writer.print(&stdout_buffer).unwrap();
+        assert_eq!(
+            get_find_in_text_ansi_result(text, "123"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0m\u{1b}[0m\u{1b}[31m123\u{1b}[0m 456\n\n"
+        );
+        assert_eq!(
+            get_find_in_text_ansi_result(text, "."),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0m\u{1b}[0m\u{1b}[31mA\u{1b}[0m\u{1b}[0m\u{1b}[31mb\u{1b}[0m\u{1b}[0m\u{1b}[31mc\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31mX\u{1b}[0m\u{1b}[0m\u{1b}[31my\u{1b}[0m\u{1b}[0m\u{1b}[31mz\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31mA\u{1b}[0m\u{1b}[0m\u{1b}[31mb\u{1b}[0m\u{1b}[0m\u{1b}[31mc\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31mX\u{1b}[0m\u{1b}[0m\u{1b}[31my\u{1b}[0m\u{1b}[0m\u{1b}[31mz\u{1b}[0m\n\u{1b}[0m\u{1b}[31m1\u{1b}[0m\u{1b}[0m\u{1b}[31m2\u{1b}[0m\u{1b}[0m\u{1b}[31m3\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31m4\u{1b}[0m\u{1b}[0m\u{1b}[31m5\u{1b}[0m\u{1b}[0m\u{1b}[31m6\u{1b}[0m\n\u{1b}[0m\u{1b}[31mA\u{1b}[0m\u{1b}[0m\u{1b}[31mb\u{1b}[0m\u{1b}[0m\u{1b}[31mc\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31mX\u{1b}[0m\u{1b}[0m\u{1b}[31my\u{1b}[0m\u{1b}[0m\u{1b}[31mz\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31mA\u{1b}[0m\u{1b}[0m\u{1b}[31mb\u{1b}[0m\u{1b}[0m\u{1b}[31mc\u{1b}[0m\u{1b}[0m\u{1b}[31m \u{1b}[0m\u{1b}[0m\u{1b}[31mX\u{1b}[0m\u{1b}[0m\u{1b}[31my\u{1b}[0m\u{1b}[0m\u{1b}[31mz\u{1b}[0m\n\n"
+        );
+        assert_eq!(
+            get_find_in_text_ansi_result(text, ".*"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0m\u{1b}[0m\u{1b}[31mAbc Xyz Abc Xyz\u{1b}[0m\n\u{1b}[0m\u{1b}[31m123 456\u{1b}[0m\n\u{1b}[0m\u{1b}[31mAbc Xyz Abc Xyz\u{1b}[0m\n\u{1b}[0m\u{1b}[31m\u{1b}[0m\n\n"
+        );
+        assert_eq!(
+            get_find_in_text_ansi_result(text, "(.|\\n)*"),
+            "\u{1b}[0m\u{1b}[36mtitle\u{1b}[0m@\u{1b}[0m\u{1b}[33mrevision_id\n\u{1b}[0m\u{1b}[0m\u{1b}[31mAbc Xyz Abc Xyz\n123 456\nAbc Xyz Abc Xyz\u{1b}[0m\n\n"
+        );
+        assert_eq!(get_find_in_text_ansi_result(text, "no_match"), "");
     }
 }
