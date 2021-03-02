@@ -8,7 +8,7 @@ use std::env::current_dir;
 use std::process;
 
 use anyhow::{anyhow, Result};
-use clap::{App, AppSettings, Arg};
+use clap::{crate_authors, crate_version, App, AppSettings, Arg};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
@@ -17,7 +17,11 @@ use wikidumpget::*;
 
 fn create_client() -> Result<Client> {
     Ok(reqwest::Client::builder()
-        .user_agent("wdget/0.1 (https://github.com/Count-Count/wikidumptools)")
+        .user_agent(concat!(
+            "wdget/",
+            crate_version!(),
+            " (https://github.com/Count-Count/wikidumptools)"
+        ))
         .build()?)
 }
 
@@ -82,9 +86,9 @@ async fn run() -> Result<()> {
         .about("Date of the dump (YYYYMMDD or 'latest')")
         .required(true);
 
-    let matches = App::new("wikidumget")
-        .version("0.1")
-        .author("Count Count <countvoncount123456@gmail.com>")
+    let matches = App::new("WikiDumpGet")
+        .version(crate_version!())
+        .author(crate_authors!())
         .about("Download Wikipedia dumps from the internet.")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DeriveDisplayOrder)

@@ -9,7 +9,7 @@ use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
 
-use clap::{App, AppSettings, Arg};
+use clap::{crate_authors, crate_version, App, AppSettings, Arg};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 
@@ -22,9 +22,9 @@ fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
     process::exit(1);
 }
 fn main() {
-    let matches = App::new("wikidumpgrep")
-        .version("0.1")
-        .author("Count Count <countvoncount123456@gmail.com>")
+    let matches = App::new("WikiDumpGrep")
+        .version(crate_version!())
+        .author(crate_authors!())
         .about("Search through Wikipedia dumps using a regex search term.")
         .setting(AppSettings::ColoredHelp)
         .arg(Arg::new("search term").about("regex search term").required(true))
