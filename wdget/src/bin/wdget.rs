@@ -93,10 +93,10 @@ async fn run() -> Result<()> {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DeriveDisplayOrder)
         .arg(
-            Arg::new("verbose")
-                .short('v')
-                .long("verbose")
-                .about("Print performance statistics"),
+            Arg::new("quiet")
+                .short('q')
+                .long("quiet")
+                .about("Don't print progress updates."),
         )
         .subcommand(
             App::new("download")
@@ -163,7 +163,7 @@ async fn run() -> Result<()> {
             let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?;
             let download_options = DownloadOptions {
                 mirror: subcommand_matches.value_of("mirror"),
-                verbose: matches.is_present("verbose"),
+                verbose: !matches.is_present("quiet"),
                 keep_partial: false,
                 resume_partial: false,
             };
