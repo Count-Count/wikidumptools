@@ -1,6 +1,7 @@
 # TODO
 
 ## High prio
+- facilitate cargo install
 
 ### wdet:
 - -d/--decompress
