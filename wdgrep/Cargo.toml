@@ -15,7 +15,7 @@ atty = "0.2.14"
 thiserror = "1.0.20"
 
 [dependencies.snmalloc-rs]
-version = "0.2.24"
+version = "0.2.25"
 features = [] # stats, debug, ...
 
 [dev-dependencies]
