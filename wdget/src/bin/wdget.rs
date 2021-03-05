@@ -89,7 +89,7 @@ async fn run() -> Result<()> {
     let matches = App::new("WikiDumpGet")
         .version(crate_version!())
         .author(crate_authors!())
-        .about("Download Wikipedia dumps from the internet.")
+        .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DeriveDisplayOrder)
         .arg(
