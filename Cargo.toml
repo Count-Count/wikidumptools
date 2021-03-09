@@ -8,6 +8,8 @@ members = [
     ]
 
 [profile.release]
+#debug = "yes" # for profiling
+
 # minimize size of binaries
 #lto = "yes"
 #codegen-units = 1
