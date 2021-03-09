@@ -4,16 +4,18 @@
 //
 // Distributed under the terms of the MIT license.
 
+mod lib;
+
 use std::env::current_dir;
 use std::process;
 
 use anyhow::{anyhow, Result};
 use clap::{crate_authors, crate_version, App, AppSettings, Arg};
 use lazy_static::lazy_static;
+use lib::*;
 use regex::Regex;
 use reqwest::Client;
 use termcolor::ColorChoice;
-use wikidumpget::*;
 
 fn create_client() -> Result<Client> {
     Ok(reqwest::Client::builder()

@@ -4,14 +4,16 @@
 //
 // Distributed under the terms of the MIT license.
 
+mod lib;
+
 use std::io::Write;
 use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
 
 use clap::{crate_authors, crate_version, App, AppSettings, Arg};
+use lib::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use wikidumpgrep::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
