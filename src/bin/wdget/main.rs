@@ -112,6 +112,12 @@ async fn run() -> Result<()> {
                         .about("Root mirror URL")
                         .takes_value(true)
                         .max_values(1),
+                )
+                .arg(
+                    Arg::new("decompress")
+                        .short('d')
+                        .long("decompress")
+                        .about("Decompress .bz2 files during download"),
                 ),
         )
         .subcommand(App::new("list-wikis").about("List all wikis for which dumps are available"))
@@ -168,6 +174,7 @@ async fn run() -> Result<()> {
                 verbose: !matches.is_present("quiet"),
                 keep_partial: false,
                 resume_partial: false,
+                decompress: subcommand_matches.is_present("decompress"),
             };
             download(&client, wiki, &date, dump_type, current_dir, &download_options).await?
         }

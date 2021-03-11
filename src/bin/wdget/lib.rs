@@ -357,6 +357,7 @@ pub struct DownloadOptions<'a> {
     pub verbose: bool,
     pub keep_partial: bool,
     pub resume_partial: bool,
+    pub decompress: bool,
 }
 
 pub async fn download<T>(
@@ -370,6 +371,17 @@ pub async fn download<T>(
 where
     T: AsRef<Path> + Send,
 {
+    fn get_target_file_path(target_directory: &Path, file_name: &str, decompress: bool) -> PathBuf {
+        let target_file_name = if decompress {
+            file_name.strip_suffix(".bz2").unwrap_or(file_name)
+        } else {
+            file_name
+        };
+        let mut target_file_pathbuf = target_directory.to_owned();
+        target_file_pathbuf.push(&target_file_name);
+        target_file_pathbuf
+    }
+
     let target_directory = target_directory.as_ref();
     if !target_directory.exists() {
         return Err(Error::TargetDirectoryDoesNotExist(target_directory.to_owned()));
@@ -381,15 +393,26 @@ where
     }
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     let root_url = download_options.mirror.unwrap_or("https://dumps.wikimedia.org");
+
+    // verify already downloaded files
     for (file_name, file_data) in files {
-        let mut target_file_pathbuf = target_directory.to_owned();
-        target_file_pathbuf.push(&file_name);
-        let target_file_path = target_file_pathbuf.as_path();
-        if target_file_pathbuf.exists() {
-            check_existing_file(target_file_path, file_data, download_options.verbose)?;
-            continue;
+        let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
+        if target_file_path.exists() {
+            if download_options.decompress {
+                eprintln!(
+                    "{} exists, but cannot be verified since it was already decompressed.",
+                    target_file_path.file_name().unwrap().to_string_lossy()
+                )
+            } else {
+                check_existing_file(target_file_path.as_path(), file_data, download_options.verbose)?;
+            }
         }
-        let partfile_name = create_partfile_path(target_file_path);
+    }
+
+    // download any missing files, decompress on-the-fly if requested
+    for (file_name, file_data) in files {
+        let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
+        let partfile_name = create_partfile_path(target_file_path.as_path());
         if download_options.resume_partial && Path::new(&partfile_name).exists() {
             let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
                 Error::DumpFileAccessError(
@@ -420,11 +443,11 @@ where
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
         let download_res = download_file(
             &url,
-            target_file_path,
+            target_file_path.as_path(),
             &partfile_name,
             file_data,
             client,
-            true, // TODO
+            download_options.decompress,
         );
         tokio::pin!(download_res);
         select! {
