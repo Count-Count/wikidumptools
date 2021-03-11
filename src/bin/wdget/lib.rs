@@ -218,8 +218,7 @@ async fn download_file(
             .stderr(Stdio::piped())
             .spawn()
             .map_err(Error::DecompressorError)?;
-        let mut decompressor_out = decompressor.stdout.take().expect("Subprocess stdout is None");
-        let mut buf = Vec::with_capacity(65536);
+
         let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin is None");
         let copy_net_to_decompressor_in = async move {
             while let Some(chunk) = r.chunk().await? {
@@ -230,8 +229,10 @@ async fn download_file(
             }
             decompressor_in.shutdown().await.map_err(Error::DecompressorError)
         };
-        tokio::pin!(copy_net_to_decompressor_in);
+
+        let mut decompressor_out = decompressor.stdout.take().expect("Subprocess stdout is None");
         let copy_decompressor_out_to_file = async move {
+            let mut buf = Vec::with_capacity(65536);
             loop {
                 let read_len = decompressor_out
                     .read_buf(&mut buf)
@@ -249,8 +250,8 @@ async fn download_file(
             }
             Result::Ok(())
         };
+
         let wait_for_decompressor_exit = async move {
-            // finish up and handle non-zero exit code
             let output = decompressor
                 .wait_with_output()
                 .await
@@ -268,7 +269,7 @@ async fn download_file(
                 )))
             }
         };
-        tokio::pin!(wait_for_decompressor_exit);
+
         tokio::try_join!(
             copy_net_to_decompressor_in,
             copy_decompressor_out_to_file,
