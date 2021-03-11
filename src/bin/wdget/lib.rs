@@ -222,7 +222,7 @@ async fn download_file(
         let mut buf = Vec::with_capacity(65536);
         {
             let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin is None");
-            let copy_net_to_decompress = async move {
+            let copy_net_to_decompressor_in = async move {
                 while let Some(chunk) = r.chunk().await? {
                     decompressor_in
                         .write_all(chunk.as_ref())
@@ -231,100 +231,50 @@ async fn download_file(
                 }
                 decompressor_in.shutdown().await.map_err(Error::DecompressorError)
             };
-            tokio::pin!(copy_net_to_decompress);
-            loop {
-                tokio::select! {
-                    copy_res = &mut copy_net_to_decompress => {
-                        copy_res?;
+            tokio::pin!(copy_net_to_decompressor_in);
+            let copy_decompressor_out_to_file = async move {
+                loop {
+                    let read_len = decompressor_out
+                        .read_buf(&mut buf)
+                        .await
+                        .map_err(Error::DecompressorError)?;
+                    if read_len > 0 {
+                        partfile.write_all(buf.as_ref()).map_err(|e| {
+                            Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
+                        })?;
+                        bytes_read += read_len as u64;
+                        buf.clear();
+                    } else {
                         break;
-                    },
-                    read_len = decompressor_out.read_buf(&mut buf) => {
-                        let read_len = read_len.map_err(Error::DecompressorError)?;
-                        if read_len > 0 {
-                            partfile.write_all(buf.as_ref()).map_err(|e| {
-                                Error::DumpFileAccessError(
-                                    partfile_path.to_owned(),
-                                    std::format!("Write error: {0}", e),
-                                )
-                            })?;
-                            bytes_read += read_len as u64;
-                            buf.clear();
-                        } else {
-                            // done
-                            if verbose {
-                                // clear progress
-                                eprint!("\r{:1$}\r","",last_printed_progress_len);
-                                std::io::stderr().flush().unwrap();
-                            }
-                            break;
-                        }
-                    },
-                    _ = progress_update_interval.tick() => {
-                        if verbose {
-                            if let Some(file_data_size) = file_data.size {
-                                let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
-                                let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                                let mut progress_string = std::format!(
-                                    "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                                    &file_name,
-                                    bytes_read as f64 / 1024.0 / 1024.0,
-                                    total_mib,
-                                    mib_per_sec);
-                                let new_printed_progress_len = progress_string.chars().count();
-                                for _ in new_printed_progress_len..last_printed_progress_len {
-                                    progress_string.push(' ');
-                                }
-                                eprint!("{}", progress_string);
-                                std::io::stderr().flush().unwrap();
-                                last_printed_progress_len = new_printed_progress_len;
-                                prev_bytes_read = bytes_read;
-                                prev_time = Instant::now();
-                            }
-                        }
-                    },
-                    _ = tokio::signal::ctrl_c() => {
-                        return Err(Error::AbortedByUser());
                     }
                 }
-            }
-        }
-        // read rest of decompressor output after decompressor stdin is closed
-        loop {
-            let read_len = decompressor_out
-                .read_buf(&mut buf)
-                .await
-                .map_err(Error::DecompressorError)?;
-            if read_len > 0 {
-                partfile.write_all(buf.as_ref()).map_err(|e| {
-                    Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
-                })?;
-                bytes_read += read_len as u64;
-                buf.clear();
-            } else {
-                // done
-                if verbose {
-                    // clear progress
-                    eprint!("\r{:1$}\r", "", last_printed_progress_len);
-                    std::io::stderr().flush().unwrap();
+                Result::Ok(())
+            };
+            let wait_for_decompressor_exit = async move {
+                // finish up and handle non-zero exit code
+                let output = decompressor
+                    .wait_with_output()
+                    .await
+                    .map_err(Error::DecompressorError)?;
+                if output.status.success() {
+                    Ok(())
+                } else {
+                    Err(Error::DecompressorError(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "Decompressor exited with status {} - stderr: {}",
+                            output.status,
+                            String::from_utf8_lossy(output.stderr.as_ref())
+                        ),
+                    )))
                 }
-                break;
-            }
-        }
-
-        // finish up and handle non-zero exit code
-        let output = decompressor
-            .wait_with_output()
-            .await
-            .map_err(Error::DecompressorError)?;
-        if !output.status.success() {
-            return Err(Error::DecompressorError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Decompressor exited with status {} - stderr: {}",
-                    output.status,
-                    String::from_utf8_lossy(output.stderr.as_ref())
-                ),
-            )));
+            };
+            tokio::pin!(wait_for_decompressor_exit);
+            tokio::try_join!(
+                copy_net_to_decompressor_in,
+                copy_decompressor_out_to_file,
+                wait_for_decompressor_exit
+            )?;
         }
     } else {
         loop {
