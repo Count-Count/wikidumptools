@@ -9,6 +9,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Instant;
 
 use fs::remove_file;
@@ -17,6 +18,8 @@ use regex::Regex;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::process::Command;
 use tokio::time;
 
 #[derive(thiserror::Error, Debug)]
@@ -25,6 +28,8 @@ pub enum Error {
     HttpError(#[from] reqwest::Error),
     #[error("Error parsing JSON: {0}")]
     JsonError(#[from] serde_json::Error),
+    #[error("Error running decompression process: {0}")]
+    DecompressorError(std::io::Error),
     #[error("Received invalid JSON data from Wikidata")]
     InvalidJsonFromWikidata(),
     #[error("Dump of this type was not found")]
@@ -174,6 +179,7 @@ async fn download_file(
     partfile_path: &Path,
     file_data: &DumpFileInfo,
     client: &Client,
+    decompress: bool,
     verbose: bool,
 ) -> Result<()> {
     let file_name = get_file_name_expect(file_path);
@@ -203,55 +209,175 @@ async fn download_file(
     let mut prev_bytes_read = 0_u64;
     let mut prev_time = Instant::now();
     let mut last_printed_progress_len = 0;
-    loop {
-        tokio::select! {
-            chunk = r.chunk() => {
-                if let Some(chunk) = chunk? {
-                    partfile.write_all(chunk.as_ref()).map_err(|e| {
-                        Error::DumpFileAccessError(
-                            partfile_path.to_owned(),
-                            std::format!("Write error: {0}", e),
-                        )
-                    })?;
-                    bytes_read += chunk.len() as u64;
-                } else {
-                    // done
-                    if verbose {
-                        // clear progress
-                        eprint!("\r{:1$}\r","",last_printed_progress_len);
-                        std::io::stderr().flush().unwrap();
-                    }
-                    break;
+
+    if decompress {
+        let mut decompressor = Command::new("bunzip2")
+            .kill_on_drop(true)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(Error::DecompressorError)?;
+        let mut decompressor_out = decompressor.stdout.take().expect("Subprocess stdout is None");
+        let mut buf = Vec::with_capacity(65536);
+        {
+            let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin is None");
+            let copy_net_to_decompress = async move {
+                while let Some(chunk) = r.chunk().await? {
+                    decompressor_in
+                        .write_all(chunk.as_ref())
+                        .await
+                        .map_err(Error::DecompressorError)?;
                 }
-            },
-            _ = progress_update_interval.tick() => {
-                if verbose {
-                    if let Some(file_data_size) = file_data.size {
-                        let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
-                        let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                        let mut progress_string = std::format!(
-                            "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                            &file_name,
-                            bytes_read as f64 / 1024.0 / 1024.0,
-                            total_mib,
-                            mib_per_sec);
-                        let new_printed_progress_len = progress_string.chars().count();
-                        for _ in new_printed_progress_len..last_printed_progress_len {
-                            progress_string.push(' ');
+                decompressor_in.shutdown().await.map_err(Error::DecompressorError)
+            };
+            tokio::pin!(copy_net_to_decompress);
+            loop {
+                tokio::select! {
+                    copy_res = &mut copy_net_to_decompress => {
+                        copy_res?;
+                        break;
+                    },
+                    read_len = decompressor_out.read_buf(&mut buf) => {
+                        let read_len = read_len.map_err(Error::DecompressorError)?;
+                        if read_len > 0 {
+                            partfile.write_all(buf.as_ref()).map_err(|e| {
+                                Error::DumpFileAccessError(
+                                    partfile_path.to_owned(),
+                                    std::format!("Write error: {0}", e),
+                                )
+                            })?;
+                            bytes_read += read_len as u64;
+                            buf.clear();
+                        } else {
+                            // done
+                            if verbose {
+                                // clear progress
+                                eprint!("\r{:1$}\r","",last_printed_progress_len);
+                                std::io::stderr().flush().unwrap();
+                            }
+                            break;
                         }
-                        eprint!("{}", progress_string);
-                        std::io::stderr().flush().unwrap();
-                        last_printed_progress_len = new_printed_progress_len;
-                        prev_bytes_read = bytes_read;
-                        prev_time = Instant::now();
+                    },
+                    _ = progress_update_interval.tick() => {
+                        if verbose {
+                            if let Some(file_data_size) = file_data.size {
+                                let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
+                                let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                                let mut progress_string = std::format!(
+                                    "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
+                                    &file_name,
+                                    bytes_read as f64 / 1024.0 / 1024.0,
+                                    total_mib,
+                                    mib_per_sec);
+                                let new_printed_progress_len = progress_string.chars().count();
+                                for _ in new_printed_progress_len..last_printed_progress_len {
+                                    progress_string.push(' ');
+                                }
+                                eprint!("{}", progress_string);
+                                std::io::stderr().flush().unwrap();
+                                last_printed_progress_len = new_printed_progress_len;
+                                prev_bytes_read = bytes_read;
+                                prev_time = Instant::now();
+                            }
+                        }
+                    },
+                    _ = tokio::signal::ctrl_c() => {
+                        return Err(Error::AbortedByUser());
                     }
                 }
-            },
-            _ = tokio::signal::ctrl_c() => {
-                return Err(Error::AbortedByUser());
             }
-        };
+        }
+        // read rest of decompressor output after decompressor stdin is closed
+        loop {
+            let read_len = decompressor_out
+                .read_buf(&mut buf)
+                .await
+                .map_err(Error::DecompressorError)?;
+            if read_len > 0 {
+                partfile.write_all(buf.as_ref()).map_err(|e| {
+                    Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
+                })?;
+                bytes_read += read_len as u64;
+                buf.clear();
+            } else {
+                // done
+                if verbose {
+                    // clear progress
+                    eprint!("\r{:1$}\r", "", last_printed_progress_len);
+                    std::io::stderr().flush().unwrap();
+                }
+                break;
+            }
+        }
+
+        // finish up and handle non-zero exit code
+        let output = decompressor
+            .wait_with_output()
+            .await
+            .map_err(Error::DecompressorError)?;
+        if !output.status.success() {
+            return Err(Error::DecompressorError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Decompressor exited with status {} - stderr: {}",
+                    output.status,
+                    String::from_utf8_lossy(output.stderr.as_ref())
+                ),
+            )));
+        }
+    } else {
+        loop {
+            tokio::select! {
+                chunk = r.chunk() => {
+                    if let Some(chunk) = chunk? {
+                        partfile.write_all(chunk.as_ref()).map_err(|e| {
+                            Error::DumpFileAccessError(
+                                partfile_path.to_owned(),
+                                std::format!("Write error: {0}", e),
+                            )
+                        })?;
+                        bytes_read += chunk.len() as u64;
+                    } else {
+                        // done
+                        if verbose {
+                            // clear progress
+                            eprint!("\r{:1$}\r","",last_printed_progress_len);
+                            std::io::stderr().flush().unwrap();
+                        }
+                        break;
+                    }
+                },
+                _ = progress_update_interval.tick() => {
+                    if verbose {
+                        if let Some(file_data_size) = file_data.size {
+                            let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
+                            let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                            let mut progress_string = std::format!(
+                                "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
+                                &file_name,
+                                bytes_read as f64 / 1024.0 / 1024.0,
+                                total_mib,
+                                mib_per_sec);
+                            let new_printed_progress_len = progress_string.chars().count();
+                            for _ in new_printed_progress_len..last_printed_progress_len {
+                                progress_string.push(' ');
+                            }
+                            eprint!("{}", progress_string);
+                            std::io::stderr().flush().unwrap();
+                            last_printed_progress_len = new_printed_progress_len;
+                            prev_bytes_read = bytes_read;
+                            prev_time = Instant::now();
+                        }
+                    }
+                },
+                _ = tokio::signal::ctrl_c() => {
+                    return Err(Error::AbortedByUser());
+                }
+            };
+        }
     }
+
     std::fs::rename(&partfile_path, &file_name).map_err(|e| {
         Error::DumpFileAccessError(
             partfile_path.to_owned(),
@@ -409,10 +535,11 @@ where
             &partfile_name,
             file_data,
             client,
+            true, // TODO
             download_options.verbose,
         )
         .await;
-        if !download_options.keep_partial && download_res.is_err() && Path::new(&partfile_name).is_file() {
+        if download_res.is_err() && !download_options.keep_partial && Path::new(&partfile_name).is_file() {
             remove_file(&partfile_name)
                 .or_else::<(), _>(|err| {
                     eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
