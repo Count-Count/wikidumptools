@@ -20,7 +20,7 @@ use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
-use tokio::time;
+use tokio::{select, time};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -180,13 +180,8 @@ async fn download_file(
     file_data: &DumpFileInfo,
     client: &Client,
     decompress: bool,
-    verbose: bool,
 ) -> Result<()> {
     let file_name = get_file_name_expect(file_path);
-    if verbose {
-        eprint!("Downloading {}...", file_name);
-        std::io::stderr().flush().unwrap();
-    }
     let mut r = client.get(url).send().await?.error_for_status()?;
     let mut partfile = OpenOptions::new()
         .create(true)
@@ -208,7 +203,6 @@ async fn download_file(
     let start_time = Instant::now();
     let mut prev_bytes_read = 0_u64;
     let mut prev_time = Instant::now();
-    let mut last_printed_progress_len = 0;
 
     if decompress {
         let mut decompressor = Command::new("bunzip2")
@@ -276,54 +270,11 @@ async fn download_file(
             wait_for_decompressor_exit
         )?;
     } else {
-        loop {
-            tokio::select! {
-                chunk = r.chunk() => {
-                    if let Some(chunk) = chunk? {
-                        partfile.write_all(chunk.as_ref()).map_err(|e| {
-                            Error::DumpFileAccessError(
-                                partfile_path.to_owned(),
-                                std::format!("Write error: {0}", e),
-                            )
-                        })?;
-                        bytes_read += chunk.len() as u64;
-                    } else {
-                        // done
-                        if verbose {
-                            // clear progress
-                            eprint!("\r{:1$}\r","",last_printed_progress_len);
-                            std::io::stderr().flush().unwrap();
-                        }
-                        break;
-                    }
-                },
-                _ = progress_update_interval.tick() => {
-                    if verbose {
-                        if let Some(file_data_size) = file_data.size {
-                            let total_mib = file_data_size as f64 / 1024.0 / 1024.0;
-                            let mib_per_sec = (bytes_read - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                            let mut progress_string = std::format!(
-                                "\rDownloading {} - {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                                &file_name,
-                                bytes_read as f64 / 1024.0 / 1024.0,
-                                total_mib,
-                                mib_per_sec);
-                            let new_printed_progress_len = progress_string.chars().count();
-                            for _ in new_printed_progress_len..last_printed_progress_len {
-                                progress_string.push(' ');
-                            }
-                            eprint!("{}", progress_string);
-                            std::io::stderr().flush().unwrap();
-                            last_printed_progress_len = new_printed_progress_len;
-                            prev_bytes_read = bytes_read;
-                            prev_time = Instant::now();
-                        }
-                    }
-                },
-                _ = tokio::signal::ctrl_c() => {
-                    return Err(Error::AbortedByUser());
-                }
-            };
+        while let Some(chunk) = r.chunk().await? {
+            partfile.write_all(chunk.as_ref()).map_err(|e| {
+                Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
+            })?;
+            bytes_read += chunk.len() as u64;
         }
     }
 
@@ -334,17 +285,6 @@ async fn download_file(
         )
     })?;
 
-    if verbose {
-        eprintln!(
-            "Downloaded {} - {:.2} MiB in {:.2} seconds ({:.2} MiB/s)",
-            &file_name,
-            bytes_read as f64 / 1024.0 / 1024.0,
-            start_time.elapsed().as_secs_f64(),
-            bytes_read as f64 / 1024.0 / 1024.0 / start_time.elapsed().as_secs_f64()
-        );
-    } else {
-        println!("Downloaded {}.", &file_name);
-    }
     Ok(())
 }
 
@@ -485,18 +425,24 @@ where
             file_data,
             client,
             true, // TODO
-            download_options.verbose,
-        )
-        .await;
-        if download_res.is_err() && !download_options.keep_partial && Path::new(&partfile_name).is_file() {
-            remove_file(&partfile_name)
-                .or_else::<(), _>(|err| {
-                    eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
-                    Ok(())
-                })
-                .unwrap();
+        );
+        tokio::pin!(download_res);
+        select! {
+            download_res = &mut download_res => {
+                if download_res.is_err() && !download_options.keep_partial && Path::new(&partfile_name).is_file() {
+                    remove_file(&partfile_name)
+                        .or_else::<(), _>(|err| {
+                            eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
+                            Ok(())
+                        })
+                        .unwrap();
+                }
+                download_res?;
+            }
+            _ = tokio::signal::ctrl_c() => {
+                return Err(Error::AbortedByUser());
+            }
         }
-        download_res?;
     }
     Ok(())
 }
