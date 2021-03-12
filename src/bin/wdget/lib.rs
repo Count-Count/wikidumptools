@@ -19,6 +19,7 @@ use futures::{FutureExt, TryFuture, TryFutureExt, TryStream};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{Client, StatusCode};
+use scopeguard::defer;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -183,6 +184,7 @@ async fn download_file(
     file_data: &DumpFileInfo,
     client: &Client,
     decompress: bool,
+    keep_partfile_on_abort: bool,
 ) -> Result<()> {
     let file_name = get_file_name_expect(&file_path);
     let mut r = client.get(url).send().await?.error_for_status()?;
@@ -197,6 +199,19 @@ async fn download_file(
                 std::format!("Could not create part file: {0}", e),
             )
         })?;
+
+    defer! {
+        if !keep_partfile_on_abort && partfile_path.is_file() {
+                remove_file(&partfile_path)
+                    .or_else::<(), _>(|err| {
+                        eprintln!("Could not remove {}: {}", partfile_path.file_name().unwrap().to_string_lossy(), &err);
+                        Ok(())
+                    })
+                    .unwrap();
+
+        }
+    }
+
     let mut bytes_read: u64 = 0;
     let progress_update_period = time::Duration::from_secs(1);
     let mut progress_update_interval = time::interval_at(
@@ -453,13 +468,14 @@ where
             file_data,
             client,
             download_options.decompress,
+            download_options.keep_partial,
         )
         .map_ok(|_| target_file_path);
         futures.push(download_res);
     }
     let stream_of_downloads = stream::iter(futures);
-    let parallel_downloads = if download_options.mirror.is_some() { 4 } else { 1 }; // TODO: numcpus? numcpus/2? different for decompress?
-    let mut buffered = stream_of_downloads.buffer_unordered(parallel_downloads);
+    let max_concurrent_downloads = if download_options.mirror.is_some() { 4 } else { 1 }; // TODO: option! default: 4? numcpus? numcpus/2? different for decompress?
+    let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
     loop {
         select! {
             res = buffered.next() => {
@@ -476,22 +492,6 @@ where
             }
         }
     }
-    // select! {
-    //     download_res = &mut download_res => {
-    //         if download_res.is_err() && !download_options.keep_partial && Path::new(&partfile_name).is_file() {
-    //             remove_file(&partfile_name)
-    //                 .or_else::<(), _>(|err| {
-    //                     eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
-    //                     Ok(())
-    //                 })
-    //                 .unwrap();
-    //         }
-    //         download_res?;
-    //     }
-    //     _ = tokio::signal::ctrl_c() => {
-    //         return Err(Error::AbortedByUser());
-    //     }
-    // }
     Ok(())
 }
 

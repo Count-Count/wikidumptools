@@ -2221,6 +2221,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
+ "scopeguard",
  "serde 1.0.124",
  "serde_json",
  "sha-1",
