@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use fs::remove_file;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use futures::{TryFuture, TryStream};
+use futures::{FutureExt, TryFuture, TryFutureExt, TryStream};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{Client, StatusCode};
@@ -448,12 +448,13 @@ where
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
         let download_res = download_file(
             url,
-            target_file_path.as_path().to_owned(),
+            target_file_path.clone(),
             partfile_name.to_owned(),
             file_data,
             client,
             download_options.decompress,
-        );
+        )
+        .map_ok(|_| target_file_path);
         futures.push(download_res);
     }
     let stream_of_downloads = stream::iter(futures);
@@ -463,7 +464,10 @@ where
         select! {
             res = buffered.next() => {
                 match res {
-                    Some(res) => res?,
+                    Some(res) => {
+                        let finished_file = res?;
+                        println!("Downloaded {}", finished_file.to_string_lossy());
+                    },
                     None => break
                 }
             }
