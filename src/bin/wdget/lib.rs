@@ -9,10 +9,13 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::Stdio;
 use std::time::Instant;
 
 use fs::remove_file;
+use futures::stream::{self, StreamExt, TryStreamExt};
+use futures::{TryFuture, TryStream};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{Client, StatusCode};
@@ -174,14 +177,14 @@ fn create_partfile_path(file_path: &Path) -> PathBuf {
 }
 
 async fn download_file(
-    url: &str,
-    file_path: &Path,
-    partfile_path: &Path,
+    url: String,
+    file_path: PathBuf,
+    partfile_path: PathBuf,
     file_data: &DumpFileInfo,
     client: &Client,
     decompress: bool,
 ) -> Result<()> {
-    let file_name = get_file_name_expect(file_path);
+    let file_name = get_file_name_expect(&file_path);
     let mut r = client.get(url).send().await?.error_for_status()?;
     let mut partfile = OpenOptions::new()
         .create(true)
@@ -225,6 +228,7 @@ async fn download_file(
         };
 
         let mut decompressor_out = decompressor.stdout.take().expect("Subprocess stdout is None");
+        let partfile_path = partfile_path.clone(); // clone since captured
         let copy_decompressor_out_to_file = async move {
             let mut buf = Vec::with_capacity(65536);
             loop {
@@ -410,6 +414,7 @@ where
     }
 
     // download any missing files, decompress on-the-fly if requested
+    let mut futures = Vec::with_capacity(files.len());
     for (file_name, file_data) in files {
         let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
         let partfile_name = create_partfile_path(target_file_path.as_path());
@@ -422,14 +427,14 @@ where
             })?;
             if !partfile_metadata.is_file() {
                 return Err(Error::DumpFileAccessError(
-                    partfile_name.clone(),
+                    partfile_name,
                     "Expected regular file".to_owned(),
                 ));
             }
             let part_len = partfile_metadata.len();
             if file_data.size.is_some() && part_len > file_data.size.unwrap() {
                 return Err(Error::DumpFileAccessError(
-                    partfile_name.clone(),
+                    partfile_name,
                     std::format!(
                         "Existing part file is longer than expected: {0} > {1}",
                         part_len,
@@ -442,32 +447,65 @@ where
         }
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
         let download_res = download_file(
-            &url,
-            target_file_path.as_path(),
-            &partfile_name,
+            url,
+            target_file_path.as_path().to_owned(),
+            partfile_name.to_owned(),
             file_data,
             client,
             download_options.decompress,
         );
-        tokio::pin!(download_res);
+        futures.push(download_res);
+    }
+    let stream_of_downloads = stream::iter(futures);
+    let parallel_downloads = if download_options.mirror.is_some() { 4 } else { 1 }; // TODO: numcpus? numcpus/2? different for decompress?
+    let mut buffered = stream_of_downloads.buffer_unordered(parallel_downloads);
+    loop {
         select! {
-            download_res = &mut download_res => {
-                if download_res.is_err() && !download_options.keep_partial && Path::new(&partfile_name).is_file() {
-                    remove_file(&partfile_name)
-                        .or_else::<(), _>(|err| {
-                            eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
-                            Ok(())
-                        })
-                        .unwrap();
+            res = buffered.next() => {
+                match res {
+                    Some(res) => res?,
+                    None => break
                 }
-                download_res?;
             }
             _ = tokio::signal::ctrl_c() => {
                 return Err(Error::AbortedByUser());
             }
         }
     }
+    // select! {
+    //     download_res = &mut download_res => {
+    //         if download_res.is_err() && !download_options.keep_partial && Path::new(&partfile_name).is_file() {
+    //             remove_file(&partfile_name)
+    //                 .or_else::<(), _>(|err| {
+    //                     eprintln!("Could not remove {}: {}", partfile_name.display(), &err);
+    //                     Ok(())
+    //                 })
+    //                 .unwrap();
+    //         }
+    //         download_res?;
+    //     }
+    //     _ = tokio::signal::ctrl_c() => {
+    //         return Err(Error::AbortedByUser());
+    //     }
+    // }
     Ok(())
+}
+
+async fn some_string() -> Result<()> {
+    Ok(())
+}
+
+async fn xx() {
+    use futures::channel::oneshot;
+
+    let (send_one, recv_one) = oneshot::channel();
+    let (send_two, recv_two) = oneshot::channel();
+
+    let stream_of_futures: stream::Iter<
+        std::vec::IntoIter<std::result::Result<oneshot::Receiver<i32>, oneshot::Canceled>>,
+    > = stream::iter(vec![Ok(recv_one), Ok(recv_two)]);
+
+    let mut buffered = stream_of_futures.try_buffer_unordered(10);
 }
 
 pub async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>> {
