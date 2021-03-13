@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use fs::remove_file;
 use futures::stream::{self, StreamExt, TryStreamExt};
-use futures::{FutureExt, TryFuture, TryFutureExt, TryStream};
+use futures::TryFutureExt;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{Client, StatusCode};
@@ -503,7 +503,10 @@ where
                 match res {
                     Some(res) => {
                         let finished_file = res?;
-                        println!("Downloaded {}", finished_file.to_string_lossy());
+                        if download_options.verbose {
+                            eprint!("\r{:1$}\r","",last_printed_progress_len);
+                            eprintln!("Downloaded {}.", finished_file.file_name().unwrap().to_string_lossy());
+                        }
                     },
                     None => break
                 }
@@ -541,23 +544,6 @@ where
         }
     }
     Ok(())
-}
-
-async fn some_string() -> Result<()> {
-    Ok(())
-}
-
-async fn xx() {
-    use futures::channel::oneshot;
-
-    let (send_one, recv_one) = oneshot::channel();
-    let (send_two, recv_two) = oneshot::channel();
-
-    let stream_of_futures: stream::Iter<
-        std::vec::IntoIter<std::result::Result<oneshot::Receiver<i32>, oneshot::Canceled>>,
-    > = stream::iter(vec![Ok(recv_one), Ok(recv_two)]);
-
-    let mut buffered = stream_of_futures.try_buffer_unordered(10);
 }
 
 pub async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>> {
