@@ -9,7 +9,6 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::process::Stdio;
 use std::time::Instant;
 
@@ -24,6 +23,7 @@ use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::{select, time};
 
 #[derive(thiserror::Error, Debug)]
@@ -177,6 +177,12 @@ fn create_partfile_path(file_path: &Path) -> PathBuf {
     part_path
 }
 
+#[derive(Debug)]
+enum DownloadProgress {
+    BytesReadFromNet(u64),
+    BytesWrittenToDisk(u64),
+}
+
 async fn download_file(
     url: String,
     file_path: PathBuf,
@@ -185,6 +191,7 @@ async fn download_file(
     client: &Client,
     decompress: bool,
     keep_partfile_on_abort: bool,
+    progress_send: UnboundedSender<DownloadProgress>,
 ) -> Result<()> {
     let file_name = get_file_name_expect(&file_path);
     let mut r = client.get(url).send().await?.error_for_status()?;
@@ -212,16 +219,6 @@ async fn download_file(
         }
     }
 
-    let mut bytes_read: u64 = 0;
-    let progress_update_period = time::Duration::from_secs(1);
-    let mut progress_update_interval = time::interval_at(
-        tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
-        progress_update_period,
-    );
-    let start_time = Instant::now();
-    let mut prev_bytes_read = 0_u64;
-    let mut prev_time = Instant::now();
-
     if decompress {
         let mut decompressor = Command::new("bunzip2")
             .kill_on_drop(true)
@@ -238,6 +235,9 @@ async fn download_file(
                     .write_all(chunk.as_ref())
                     .await
                     .map_err(Error::DecompressorError)?;
+                progress_send
+                    .send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))
+                    .unwrap();
             }
             decompressor_in.shutdown().await.map_err(Error::DecompressorError)
         };
@@ -255,7 +255,6 @@ async fn download_file(
                     partfile.write_all(buf.as_ref()).map_err(|e| {
                         Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
                     })?;
-                    bytes_read += read_len as u64;
                     buf.clear();
                 } else {
                     break;
@@ -293,7 +292,6 @@ async fn download_file(
             partfile.write_all(chunk.as_ref()).map_err(|e| {
                 Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
             })?;
-            bytes_read += chunk.len() as u64;
         }
     }
 
@@ -430,6 +428,8 @@ where
 
     // download any missing files, decompress on-the-fly if requested
     let mut futures = Vec::with_capacity(files.len());
+    let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
+    let mut total_data_size = Some(0_u64);
     for (file_name, file_data) in files {
         let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
         let partfile_name = create_partfile_path(target_file_path.as_path());
@@ -460,6 +460,16 @@ where
             // partial download not yet implemented
             todo!();
         }
+        if let Some(ref mut len) = total_data_size {
+            match file_data.size {
+                Some(cur_len) => {
+                    *len += cur_len;
+                }
+                None => {
+                    total_data_size = None;
+                }
+            }
+        }
         let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
         let download_res = download_file(
             url,
@@ -469,6 +479,7 @@ where
             client,
             download_options.decompress,
             download_options.keep_partial,
+            progress_send.clone(),
         )
         .map_ok(|_| target_file_path);
         futures.push(download_res);
@@ -476,6 +487,16 @@ where
     let stream_of_downloads = stream::iter(futures);
     let max_concurrent_downloads = if download_options.mirror.is_some() { 4 } else { 1 }; // TODO: option! default: 4? numcpus? numcpus/2? different for decompress?
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
+    let mut total_bytes_received = 0_u64;
+    let progress_update_period = time::Duration::from_secs(1);
+    let mut progress_update_interval = time::interval_at(
+        tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
+        progress_update_period,
+    );
+    let start_time = Instant::now();
+    let mut prev_bytes_read = 0_u64;
+    let mut prev_time = Instant::now();
+    let mut last_printed_progress_len = 0;
     loop {
         select! {
             res = buffered.next() => {
@@ -490,6 +511,33 @@ where
             _ = tokio::signal::ctrl_c() => {
                 return Err(Error::AbortedByUser());
             }
+            download_progress = progress_receive.recv() => {
+                if let Some(DownloadProgress::BytesReadFromNet(len)) = download_progress {
+                    total_bytes_received += len;
+                }
+            }
+            _ = progress_update_interval.tick() => {
+                if download_options.verbose {
+                    let total_mib = total_data_size.unwrap() as f64 / 1024.0 / 1024.0;
+                    let mib_per_sec = (total_bytes_received - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                    let mut progress_string = std::format!(
+                        "\rDownloading {}- {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
+                        if download_options.decompress {"and decompressing "} else {""},
+                        total_bytes_received as f64 / 1024.0 / 1024.0,
+                        total_mib,
+                        mib_per_sec);
+                    let new_printed_progress_len = progress_string.chars().count();
+                    for _ in new_printed_progress_len..last_printed_progress_len {
+                        progress_string.push(' ');
+                    }
+                    eprint!("{}", progress_string);
+                    std::io::stderr().flush().unwrap();
+                    last_printed_progress_len = new_printed_progress_len;
+                    prev_bytes_read = total_bytes_received;
+                    prev_time = Instant::now();
+                }
+            }
+
         }
     }
     Ok(())
