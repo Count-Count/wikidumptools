@@ -521,14 +521,22 @@ where
             }
             _ = progress_update_interval.tick() => {
                 if download_options.verbose {
-                    let total_mib = total_data_size.unwrap() as f64 / 1024.0 / 1024.0;
                     let mib_per_sec = (total_bytes_received - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                    let mut progress_string = std::format!(
-                        "\rDownloading {}- {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
-                        if download_options.decompress {"and decompressing "} else {""},
-                        total_bytes_received as f64 / 1024.0 / 1024.0,
-                        total_mib,
-                        mib_per_sec);
+                    let mut progress_string = if let Some(total_data_size) = total_data_size {
+                        let total_mib = total_data_size as f64 / 1024.0 / 1024.0;
+                        std::format!(
+                            "\rDownloading {}- {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
+                            if download_options.decompress {"and decompressing "} else {""},
+                            total_bytes_received as f64 / 1024.0 / 1024.0,
+                            total_mib,
+                            mib_per_sec)
+                    } else {
+                        std::format!(
+                            "\rDownloading {}- {:.2} MiB downloaded ({:.2} MiB/s).",
+                            if download_options.decompress {"and decompressing "} else {""},
+                            total_bytes_received as f64 / 1024.0 / 1024.0,
+                            mib_per_sec)
+                    };
                     let new_printed_progress_len = progress_string.chars().count();
                     for _ in new_printed_progress_len..last_printed_progress_len {
                         progress_string.push(' ');
@@ -542,6 +550,20 @@ where
             }
 
         }
+    }
+    if download_options.verbose {
+        let total_mib = total_bytes_received as f64 / 1024.0 / 1024.0;
+        let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
+        eprintln!(
+            "\rDownloaded {}{:.2} MiB ({:.2} MiB/s).",
+            if download_options.decompress {
+                "and decompressed "
+            } else {
+                ""
+            },
+            total_mib,
+            mib_per_sec
+        );
     }
     Ok(())
 }
