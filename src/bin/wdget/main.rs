@@ -172,8 +172,6 @@ async fn run() -> Result<()> {
             let download_options = DownloadOptions {
                 mirror: subcommand_matches.value_of("mirror"),
                 verbose: !matches.is_present("quiet"),
-                keep_partial: false,
-                resume_partial: false,
                 decompress: subcommand_matches.is_present("decompress"),
             };
             download(&client, wiki, &date, dump_type, current_dir, &download_options).await?

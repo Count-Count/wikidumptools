@@ -13,7 +13,7 @@ use std::process::Stdio;
 use std::time::Instant;
 
 use fs::remove_file;
-use futures::stream::{self, StreamExt, TryStreamExt};
+use futures::stream::{self, StreamExt};
 use futures::TryFutureExt;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -189,7 +189,6 @@ async fn download_file(
     partfile_path: PathBuf,
     client: &Client,
     decompress: bool,
-    keep_partfile_on_abort: bool,
     progress_send: UnboundedSender<DownloadProgress>,
 ) -> Result<()> {
     let file_name = get_file_name_expect(&file_path);
@@ -207,13 +206,13 @@ async fn download_file(
         })?;
 
     defer! {
-        if !keep_partfile_on_abort && partfile_path.is_file() {
-                remove_file(&partfile_path)
-                    .or_else::<(), _>(|err| {
-                        eprintln!("Could not remove {}: {}", partfile_path.file_name().unwrap().to_string_lossy(), &err);
-                        Ok(())
-                    })
-                    .unwrap();
+        if partfile_path.is_file() {
+            remove_file(&partfile_path)
+                .or_else::<(), _>(|err| {
+                    eprintln!("Could not remove {}: {}", partfile_path.file_name().unwrap().to_string_lossy(), &err);
+                    Ok(())
+                })
+                .unwrap();
         }
     }
 
@@ -373,8 +372,6 @@ fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool
 pub struct DownloadOptions<'a> {
     pub mirror: Option<&'a str>,
     pub verbose: bool,
-    pub keep_partial: bool,
-    pub resume_partial: bool,
     pub decompress: bool,
 }
 
@@ -412,55 +409,19 @@ where
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     let root_url = download_options.mirror.unwrap_or("https://dumps.wikimedia.org");
 
-    // verify already downloaded files
-    for (file_name, file_data) in files {
-        let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
-        if target_file_path.exists() {
-            if download_options.decompress {
-                eprintln!(
-                    "{} exists, but cannot be verified since it was already decompressed.",
-                    target_file_path.file_name().unwrap().to_string_lossy()
-                )
-            } else {
-                check_existing_file(target_file_path.as_path(), file_data, download_options.verbose)?;
-            }
-        }
-    }
-
     // download any missing files, decompress on-the-fly if requested
     let mut futures = Vec::with_capacity(files.len());
     let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
     let mut total_data_size = Some(0_u64);
     for (file_name, file_data) in files {
         let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
-        let partfile_name = create_partfile_path(target_file_path.as_path());
-        if download_options.resume_partial && Path::new(&partfile_name).exists() {
-            let partfile_metadata = fs::metadata(&partfile_name).map_err(|e| {
-                Error::DumpFileAccessError(
-                    partfile_name.clone(),
-                    std::format!("Could not get file information: {0}", e),
-                )
-            })?;
-            if !partfile_metadata.is_file() {
-                return Err(Error::DumpFileAccessError(
-                    partfile_name,
-                    "Expected regular file".to_owned(),
-                ));
-            }
-            let part_len = partfile_metadata.len();
-            if file_data.size.is_some() && part_len > file_data.size.unwrap() {
-                return Err(Error::DumpFileAccessError(
-                    partfile_name,
-                    std::format!(
-                        "Existing part file is longer than expected: {0} > {1}",
-                        part_len,
-                        file_data.size.unwrap(),
-                    ),
-                ));
-            }
-            // partial download not yet implemented
-            todo!();
+        if target_file_path.exists() {
+            eprintln!(
+                "{} exists, skipping.",
+                target_file_path.file_name().unwrap().to_string_lossy()
+            )
         }
+        let partfile_name = create_partfile_path(target_file_path.as_path());
         if let Some(ref mut len) = total_data_size {
             match file_data.size {
                 Some(cur_len) => {
@@ -478,7 +439,6 @@ where
             partfile_name.to_owned(),
             client,
             download_options.decompress,
-            download_options.keep_partial,
             progress_send.clone(),
         )
         .map_ok(|_| target_file_path);
