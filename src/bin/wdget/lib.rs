@@ -291,6 +291,7 @@ async fn download_file(
             partfile.write_all(chunk.as_ref()).map_err(|e| {
                 Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
             })?;
+            progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64));
         }
     }
 
