@@ -305,7 +305,7 @@ async fn download_file(
     Ok(())
 }
 
-fn check_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
+fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
     let file_name = get_file_name_expect(file_path);
     let file_metadata = fs::metadata(file_path).map_err(|e| {
         Error::DumpFileAccessError(
