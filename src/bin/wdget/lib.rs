@@ -193,6 +193,7 @@ async fn download_file(
     partfile_path: PathBuf,
     client: &Client,
     decompress: bool,
+    verify_file_data: Option<&DumpFileInfo>,
     progress_send: UnboundedSender<DownloadProgress>,
 ) -> Result<()> {
     let file_name = get_file_name_expect(&file_path);
@@ -220,6 +221,9 @@ async fn download_file(
         }
     }
 
+    let expected_sha1 = verify_file_data.and_then(|info| info.sha1.as_ref());
+    let mut hasher = Sha1::new();
+
     if decompress {
         let mut decompressor = Command::new("bunzip2")
             .kill_on_drop(true)
@@ -230,8 +234,11 @@ async fn download_file(
             .map_err(Error::DecompressorError)?;
 
         let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin is None");
-        let copy_net_to_decompressor_in = async move {
+        let copy_net_to_decompressor_in = async {
             while let Some(chunk) = r.chunk().await? {
+                if expected_sha1.is_some() {
+                    hasher.update(chunk.as_ref());
+                }
                 decompressor_in
                     .write_all(chunk.as_ref())
                     .await
@@ -290,6 +297,9 @@ async fn download_file(
         )?;
     } else {
         while let Some(chunk) = r.chunk().await? {
+            if expected_sha1.is_some() {
+                hasher.update(chunk.as_ref());
+            }
             partfile.write_all(chunk.as_ref()).map_err(|e| {
                 Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
             })?;
@@ -299,7 +309,18 @@ async fn download_file(
         }
     }
 
-    std::fs::rename(&partfile_path, &file_name).map_err(|e| {
+    if let Some(expected_sha1) = expected_sha1 {
+        let sha1_bytes = hasher.finalize();
+        let actual_sha1 = format!("{:x}", sha1_bytes);
+        if expected_sha1 != &actual_sha1 {
+            return Err(Error::DumpFileAccessError(
+                file_path.to_owned(),
+                "SHA1 digest differs from the expected one.".to_owned(),
+            ));
+        };
+    }
+
+    std::fs::rename(&partfile_path, &file_path).map_err(|e| {
         Error::DumpFileAccessError(
             partfile_path.to_owned(),
             std::format!("Could not rename part file: {0}", e),
@@ -464,7 +485,7 @@ where
             );
             continue;
         }
-        let partfile_name = create_partfile_path(target_file_path.as_path());
+        let partfile_path = create_partfile_path(target_file_path.as_path());
         if let Some(ref mut len) = total_data_size {
             match file_data.size {
                 Some(cur_len) => {
@@ -479,9 +500,10 @@ where
         let download_res = download_file(
             url,
             target_file_path.clone(),
-            partfile_name.to_owned(),
+            partfile_path.to_owned(),
             client,
             download_options.decompress,
+            Some(file_data),
             progress_send.clone(),
         )
         .map_ok(|_| target_file_path);
