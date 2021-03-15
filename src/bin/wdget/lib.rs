@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Instant;
@@ -446,6 +447,7 @@ pub struct DownloadOptions<'a> {
     pub mirror: Option<&'a str>,
     pub verbose: bool,
     pub decompress: bool,
+    pub concurrency: Option<NonZeroUsize>,
 }
 
 pub async fn download<T>(
@@ -512,15 +514,20 @@ where
     // download missing files
     let stream_of_downloads = stream::iter(futures);
 
-    let max_concurrent_downloads = if download_options.mirror.is_some() {
-        if download_options.decompress {
-            num_cpus::get()
-        } else {
-            4
-        }
-    } else {
-        1
-    };
+    let max_concurrent_downloads = download_options.concurrency.map_or_else(
+        || {
+            if download_options.mirror.is_some() {
+                if download_options.decompress {
+                    num_cpus::get()
+                } else {
+                    4
+                }
+            } else {
+                1
+            }
+        },
+        |n| n.get(),
+    );
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
 
     let progress_update_period = time::Duration::from_secs(1);

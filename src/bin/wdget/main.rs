@@ -7,6 +7,7 @@
 mod lib;
 
 use std::env::current_dir;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
 
@@ -131,6 +132,13 @@ async fn run() -> Result<()> {
                         .long("mirror")
                         .about("Mirror root URL or one of the shortcuts 'acc.umu.se' and 'your.org'")
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::new("concurrency")
+                        .short('j')
+                        .long("concurrency")
+                        .about("Number of parallel connections, defaults to 1 if no mirror, determined heuristically otherwise.")
+                        .takes_value(true),
                 ),
         )
         .subcommand(
@@ -208,10 +216,24 @@ async fn run() -> Result<()> {
                 Some(url) => Some(url),
                 None => None,
             };
+
+            let concurrency = subcommand_matches
+                .value_of("concurrency")
+                .map(str::parse::<NonZeroUsize>)
+                .transpose()
+                .map_err(|_| anyhow!("Invalid number for concurrency option."))?;
+            match concurrency {
+                Some(concurrency) if mirror.is_none() && concurrency.get() > 2 => {
+                    bail!("A maximum of two concurrent connections are allowed for main Wikimedia dump website")
+                }
+                _ => {}
+            }
+
             let download_options = DownloadOptions {
                 mirror,
                 verbose: !matches.is_present("quiet"),
                 decompress: subcommand_matches.is_present("decompress"),
+                concurrency,
             };
             download(&client, wiki, &date, dump_type, target_dir, &download_options).await?
         }
