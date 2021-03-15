@@ -309,7 +309,6 @@ async fn download_file(
     verify_file_data: Option<&DumpFileInfo>,
     progress_send: UnboundedSender<DownloadProgress>,
 ) -> Result<()> {
-    let file_name = get_file_name_expect(&file_path);
     let mut r = client.get(url).send().await?.error_for_status()?;
     let mut partfile = OpenOptions::new()
         .create(true)
