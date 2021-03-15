@@ -2207,6 +2207,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "memchr",
+ "num_cpus",
  "quick-xml",
  "rayon",
  "regex",

@@ -512,7 +512,15 @@ where
     // download missing files
     let stream_of_downloads = stream::iter(futures);
 
-    let max_concurrent_downloads = if download_options.mirror.is_some() { 4 } else { 1 }; // TODO: option! default: 4? numcpus? numcpus/2? different for decompress?
+    let max_concurrent_downloads = if download_options.mirror.is_some() {
+        if download_options.decompress {
+            num_cpus::get()
+        } else {
+            4
+        }
+    } else {
+        1
+    };
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
 
     let progress_update_period = time::Duration::from_secs(1);

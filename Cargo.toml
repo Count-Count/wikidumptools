@@ -29,6 +29,7 @@ sha-1 = "0.9.1"
 lazy_static = "1.4"
 futures = "0.3.13"
 scopeguard = "1.1.0"
+num_cpus = "1.13.0"
 
 [dependencies.snmalloc-rs]
 version = "0.2.24"
