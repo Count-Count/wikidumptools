@@ -2,14 +2,18 @@
 
 ## High prio
 - facilitate cargo install
+    - README.md
 
 ### wdget:
-- show compressed bytes during/in final stats
-- new options --bunzip2-binary, --bunzip2-options, --concurrency
 - color?
-- verify existing files by default
-- quiet if no terminal connected
-- bunzip2 per lib?
+- show compressed bytes during/in final stats
+- verify existing files by default, add --no-verify flag
+- utf8 handling cleanup -> camino 1.0.3
+
+- quiet (no progress) if no terminal connected
+- bunzip2 via lib?
+- new options --bunzip2-binary, --bunzip2-options
+- gz, 7z decompression support
 
 ### wdgrep
 - ci, more tests, coverage
@@ -55,7 +59,7 @@
 ## wdget
 - progress: show ETA?
 - list-dumps: also show #files, total size, description as table
-- show list-wikis as table
+- show list-wikis as table with tabwriter crate
 - only show progress with tty
 - download --verify or --no-verify option?
 - colorize (+clap colorize)
