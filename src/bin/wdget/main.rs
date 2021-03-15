@@ -129,7 +129,7 @@ async fn run() -> Result<()> {
                     Arg::new("mirror")
                         .short('m')
                         .long("mirror")
-                        .about("Root mirror URL")
+                        .about("Mirror root URL or one of the shortcuts 'acc.umu.se' and 'your.org'")
                         .number_of_values(1),
                 ),
         )
@@ -202,8 +202,14 @@ async fn run() -> Result<()> {
             if !target_dir.is_dir() {
                 bail!("Target directory does not exist or is not accessible.")
             };
+            let mirror = match subcommand_matches.value_of("mirror") {
+                Some("acc.umu.se") => Some("https://ftp.acc.umu.se/mirror/wikimedia.org/dumps"),
+                Some("your.org") => Some("http://dumps.wikimedia.your.org/"),
+                Some(url) => Some(url),
+                None => None,
+            };
             let download_options = DownloadOptions {
-                mirror: subcommand_matches.value_of("mirror"),
+                mirror,
                 verbose: !matches.is_present("quiet"),
                 decompress: subcommand_matches.is_present("decompress"),
             };
