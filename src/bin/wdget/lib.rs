@@ -450,7 +450,7 @@ where
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     let root_url = download_options.mirror.unwrap_or("https://dumps.wikimedia.org");
 
-    // download any missing files, decompress on-the-fly if requested
+    // create futures for missing files
     let mut futures = Vec::with_capacity(files.len());
     let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
     let mut total_data_size = Some(0_u64);
@@ -486,19 +486,23 @@ where
         .map_ok(|_| target_file_path);
         futures.push(download_res);
     }
+
+    // download missing files
     let stream_of_downloads = stream::iter(futures);
+
     let max_concurrent_downloads = if download_options.mirror.is_some() { 4 } else { 1 }; // TODO: option! default: 4? numcpus? numcpus/2? different for decompress?
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
-    let mut total_bytes_received = 0_u64;
+
     let progress_update_period = time::Duration::from_secs(1);
     let mut progress_update_interval = time::interval_at(
         tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
         progress_update_period,
     );
     let start_time = Instant::now();
-    let mut prev_bytes_read = 0_u64;
     let mut prev_time = Instant::now();
+    let mut prev_bytes_received = 0_u64;
     let mut last_printed_progress_len = 0;
+    let mut bytes_received = 0_u64;
     loop {
         select! {
             res = buffered.next() => {
@@ -517,27 +521,27 @@ where
                 return Err(Error::AbortedByUser());
             }
             download_progress = progress_receive.recv() => {
-                if let Some(DownloadProgress::BytesReadFromNet(len)) = download_progress {
-                    total_bytes_received += len;
+                if let Some(DownloadProgress::BytesReadFromNet(count)) = download_progress {
+                    bytes_received += count;
                 }
             }
             _ = progress_update_interval.tick() => {
                 if download_options.verbose {
-                    let mib_per_sec = (total_bytes_received - prev_bytes_read) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                    let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
                     let mut progress_string =
                         if let Some(total_data_size) = total_data_size {
                             let total_mib = total_data_size as f64 / 1024.0 / 1024.0;
                             std::format!(
                                 "\rDownloading {}- {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
                                 if download_options.decompress {"and decompressing "} else {""},
-                                total_bytes_received as f64 / 1024.0 / 1024.0,
+                                bytes_received as f64 / 1024.0 / 1024.0,
                                 total_mib,
                                 mib_per_sec)
                         } else {
                             std::format!(
                                 "\rDownloading {}- {:.2} MiB downloaded ({:.2} MiB/s).",
                                 if download_options.decompress {"and decompressing "} else {""},
-                                total_bytes_received as f64 / 1024.0 / 1024.0,
+                                bytes_received as f64 / 1024.0 / 1024.0,
                                 mib_per_sec)
                         };
                     let new_printed_progress_len = progress_string.chars().count();
@@ -547,7 +551,7 @@ where
                     eprint!("{}", progress_string);
                     std::io::stderr().flush().unwrap();
                     last_printed_progress_len = new_printed_progress_len;
-                    prev_bytes_read = total_bytes_received;
+                    prev_bytes_received = bytes_received;
                     prev_time = Instant::now();
                 }
             }
@@ -555,7 +559,7 @@ where
         }
     }
     if download_options.verbose {
-        let total_mib = total_bytes_received as f64 / 1024.0 / 1024.0;
+        let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
         let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
         eprintln!(
             "\rDownloaded {}{:.2} MiB ({:.2} MiB/s).",
