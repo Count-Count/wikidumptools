@@ -3,11 +3,13 @@
 ## High prio
 - facilitate cargo install
 
-### wdet:
-- mirror-list
-- show percentage complete, time remaining
+### wdget:
 - show compressed bytes during/in final stats
 - new options --bunzip2-binary, --bunzip2-options, --concurrency
+- color?
+- verify existing files by default
+- quiet if no terminal connected
+- bunzip2 per lib?
 
 ### wdgrep
 - ci, more tests, coverage
@@ -47,23 +49,18 @@
 - show performance statistics on break too
 - make use of index and parallelize single-file bzip2 extraction by using multi-streams (abandoned: bzip2 too slow in any case, no need to waste time on it)
 - make use of index when bzip2 searching with --intitle (abandoned: bzip2 too slow in any case, no need to waste time on it)
+- wdget: --resume-partial/--keep-partial
+- wdget: automatically try again if intermittent network issue (or w/ --retry)?
 
 ## wdget
-- -d/--decompress option
-- mirror list/shortcut
-- two-line progress text to avoid terminal overflow at normal widths
 - progress: show ETA?
 - list-dumps: also show #files, total size, description as table
 - show list-wikis as table
-- supress progress with --no-progress or --quiet instead of !-verbose, only show progress with tty
-- print downloaded files in quiet mode?
-- verify sha1 checksums while dl'ing (only with --verify option)
+- only show progress with tty
+- download --verify or --no-verify option?
 - colorize (+clap colorize)
-- option to extract .gz/bz2/.xz while dl'ing?
+- support decompressing  .gz/.xz while dl'ing as well?
 - --overwrite (or --force ?)
-- --resume-partial/--keep-partial
-- automatically try again if intermittent network issue (or w/ --retry)?
-- verify (given files) subcommand
 - tests?
 
 ## further ideas:
