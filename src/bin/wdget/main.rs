@@ -7,9 +7,10 @@
 mod lib;
 
 use std::env::current_dir;
+use std::path::PathBuf;
 use std::process;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use clap::{crate_authors, crate_version, App, AppSettings, Arg};
 use lazy_static::lazy_static;
 use lib::*;
@@ -111,9 +112,10 @@ async fn run() -> Result<()> {
                 .arg(dump_date_arg.clone())
                 .arg(Arg::new("dump type").about("Type of the dump").required(true))
                 .arg(
-                    Arg::new("mirror")
-                        .long("mirror")
-                        .about("Root mirror URL")
+                    Arg::new("target-dir")
+                        .short('t')
+                        .long("target-dir")
+                        .about("Target directory")
                         .takes_value(true)
                         .max_values(1),
                 )
@@ -122,6 +124,14 @@ async fn run() -> Result<()> {
                         .short('d')
                         .long("decompress")
                         .about("Decompress .bz2 files during download"),
+                )
+                .arg(
+                    Arg::new("mirror")
+                        .short('m')
+                        .long("mirror")
+                        .about("Root mirror URL")
+                        .takes_value(true)
+                        .max_values(1),
                 ),
         )
         .subcommand(
@@ -129,7 +139,15 @@ async fn run() -> Result<()> {
                 .about("Verify an already downloaded wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
-                .arg(Arg::new("dump type").about("Type of the dump").required(true)),
+                .arg(Arg::new("dump type").about("Type of the dump").required(true))
+                .arg(
+                    Arg::new("dir")
+                        .short('d')
+                        .long("dir")
+                        .about("Directory with the dump files")
+                        .takes_value(true)
+                        .max_values(1),
+                ),
         )
         .subcommand(App::new("list-wikis").about("List all wikis for which dumps are available"))
         .subcommand(
@@ -179,13 +197,19 @@ async fn run() -> Result<()> {
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
             let dump_type = subcommand_matches.value_of("dump type").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
-            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?;
+            let target_dir = match subcommand_matches.value_of("target-dir") {
+                None => current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?,
+                Some(dir) => PathBuf::from(dir),
+            };
+            if !target_dir.is_dir() {
+                bail!("Target directory does not exist or is not accessible.")
+            };
             let download_options = DownloadOptions {
                 mirror: subcommand_matches.value_of("mirror"),
                 verbose: !matches.is_present("quiet"),
                 decompress: subcommand_matches.is_present("decompress"),
             };
-            download(&client, wiki, &date, dump_type, current_dir, &download_options).await?
+            download(&client, wiki, &date, dump_type, target_dir, &download_options).await?
         }
         "verify" => {
             let subcommand_matches = matches.subcommand_matches("verify").unwrap();
@@ -193,8 +217,14 @@ async fn run() -> Result<()> {
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
             check_date_valid(date_spec)?;
             let dump_type = subcommand_matches.value_of("dump type").unwrap();
-            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?;
-            verify(&client, wiki, date_spec, dump_type, current_dir).await?
+            let dump_files_dir = match subcommand_matches.value_of("dir") {
+                None => current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?,
+                Some(dir) => PathBuf::from(dir),
+            };
+            if !dump_files_dir.is_dir() {
+                bail!("Dump files directory does not exist or is not accessible.")
+            };
+            verify(&client, wiki, date_spec, dump_type, dump_files_dir).await?
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }

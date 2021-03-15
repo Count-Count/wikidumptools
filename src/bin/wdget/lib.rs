@@ -383,13 +383,13 @@ fn get_target_file_path(target_directory: &Path, file_name: &str, decompress: bo
     target_file_pathbuf
 }
 
-pub async fn verify<T>(client: &Client, wiki: &str, date: &str, dump_type: &str, target_directory: T) -> Result<()>
+pub async fn verify<T>(client: &Client, wiki: &str, date: &str, dump_type: &str, dump_files_directory: T) -> Result<()>
 where
     T: AsRef<Path> + Send,
 {
-    let target_directory = target_directory.as_ref();
-    if !target_directory.exists() {
-        return Err(Error::TargetDirectoryDoesNotExist(target_directory.to_owned()));
+    let dump_files_directory = dump_files_directory.as_ref();
+    if !dump_files_directory.exists() {
+        return Err(Error::TargetDirectoryDoesNotExist(dump_files_directory.to_owned()));
     }
     let dump_status = get_dump_status(client, wiki, date).await?;
     let job_info = dump_status.jobs.get(dump_type).ok_or(Error::DumpTypeNotFound())?;
@@ -398,9 +398,9 @@ where
     }
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     for (file_name, file_data) in files {
-        let target_file_path = get_target_file_path(target_directory, file_name, false);
+        let target_file_path = get_target_file_path(dump_files_directory, file_name, false);
         if !target_file_path.exists() {
-            let decompressed_target_file_path = get_target_file_path(target_directory, file_name, true);
+            let decompressed_target_file_path = get_target_file_path(dump_files_directory, file_name, true);
             if decompressed_target_file_path.exists() {
                 return Err(Error::DecompressedFileCannotBeVerified(
                     decompressed_target_file_path
