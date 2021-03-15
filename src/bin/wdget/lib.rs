@@ -557,22 +557,29 @@ where
             }
             _ = progress_update_interval.tick() => {
                 if download_options.verbose {
-                    let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                    let speed =
+                    if bytes_received - prev_bytes_received != 0  {
+                        let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                        std::format!("({:.2} MiB/s)", mib_per_sec)
+                    } else {
+                        std::format!("(stalled)")
+                    };
                     let mut progress_string =
                         if let Some(total_data_size) = total_data_size {
                             let total_mib = total_data_size as f64 / 1024.0 / 1024.0;
                             std::format!(
-                                "\rDownloading {}- {:.2} MiB of {:.2} MiB downloaded ({:.2} MiB/s).",
+                                "\rDownloading {}- {:.2} MiB ({} %) of {:.2} MiB downloaded {}.",
                                 if download_options.decompress {"and decompressing "} else {""},
                                 bytes_received as f64 / 1024.0 / 1024.0,
+                                bytes_received * 100 / total_data_size,
                                 total_mib,
-                                mib_per_sec)
+                                speed)
                         } else {
                             std::format!(
-                                "\rDownloading {}- {:.2} MiB downloaded ({:.2} MiB/s).",
+                                "\rDownloading {}- {:.2} MiB downloaded {}.",
                                 if download_options.decompress {"and decompressing "} else {""},
                                 bytes_received as f64 / 1024.0 / 1024.0,
-                                mib_per_sec)
+                                speed)
                         };
                     let new_printed_progress_len = progress_string.chars().count();
                     for _ in new_printed_progress_len..last_printed_progress_len {
