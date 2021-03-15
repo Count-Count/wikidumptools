@@ -322,8 +322,9 @@ fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: boo
             return Err(Error::DumpFileAccessError(
                 file_path.to_owned(),
                 std::format!(
-                    "Dump file already exists, but its size does not match the expected size. Expected: {}, actual: {}.",
-                    expected_file_size, file_metadata.len()
+                    "Dump file size does not match the expected size. Expected: {}, actual: {}.",
+                    expected_file_size,
+                    file_metadata.len()
                 ),
             ));
         }
@@ -347,7 +348,7 @@ fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: boo
             if expected_sha1 != &actual_sha1 {
                 return Err(Error::DumpFileAccessError(
                     file_path.to_owned(),
-                    "File already exists but the SHA1 digest differs from the expected one.".to_owned(),
+                    "SHA1 digest differs from the expected one.".to_owned(),
                 ));
             };
             if verbose {
@@ -364,7 +365,7 @@ fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: boo
         }
         None => {
             eprintln!(
-                "WARNING: {} already exists but cannot be checked due to missing SHA1 checksum, skipping download.",
+                "WARNING: {} cannot be checked due to missing SHA1 checksum.",
                 &file_name
             );
         }
