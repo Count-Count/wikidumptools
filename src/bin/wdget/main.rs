@@ -123,14 +123,14 @@ async fn run() -> Result<()> {
                         .short('t')
                         .long("target-dir")
                         .about("Target directory")
-                        .number_of_values(1),
+                        .takes_value(true),
                 )
                 .arg(
                     Arg::new("mirror")
                         .short('m')
                         .long("mirror")
                         .about("Mirror root URL or one of the shortcuts 'acc.umu.se' and 'your.org'")
-                        .number_of_values(1),
+                        .takes_value(true),
                 ),
         )
         .subcommand(
@@ -144,7 +144,7 @@ async fn run() -> Result<()> {
                         .short('d')
                         .long("dir")
                         .about("Directory with the dump files")
-                        .number_of_values(1),
+                        .takes_value(true),
                 ),
         )
         .subcommand(App::new("list-wikis").about("List all wikis for which dumps are available"))
