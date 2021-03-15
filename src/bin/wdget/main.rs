@@ -102,6 +102,7 @@ async fn run() -> Result<()> {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::VersionlessSubcommands)
         .setting(AppSettings::DeriveDisplayOrder)
+        .setting(AppSettings::ColoredHelp)
         .subcommand(
             App::new("download")
                 .about("Download a wiki dump")
