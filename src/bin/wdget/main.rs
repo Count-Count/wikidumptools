@@ -99,12 +99,7 @@ async fn run() -> Result<()> {
         .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::DeriveDisplayOrder)
-        .arg(
-            Arg::new("quiet")
-                .short('q')
-                .long("quiet")
-                .about("Don't print progress updates."),
-        )
+        .setting(AppSettings::VersionlessSubcommands)
         .subcommand(
             App::new("download")
                 .about("Download a wiki dump")
@@ -112,18 +107,24 @@ async fn run() -> Result<()> {
                 .arg(dump_date_arg.clone())
                 .arg(Arg::new("dump type").about("Type of the dump").required(true))
                 .arg(
-                    Arg::new("target-dir")
-                        .short('t')
-                        .long("target-dir")
-                        .about("Target directory")
-                        .takes_value(true)
-                        .max_values(1),
+                    Arg::new("quiet")
+                        .short('q')
+                        .long("quiet")
+                        .about("Don't print progress updates"),
                 )
                 .arg(
                     Arg::new("decompress")
                         .short('d')
                         .long("decompress")
                         .about("Decompress .bz2 files during download"),
+                )
+                .arg(
+                    Arg::new("target-dir")
+                        .short('t')
+                        .long("target-dir")
+                        .about("Target directory")
+                        .takes_value(true)
+                        .max_values(1),
                 )
                 .arg(
                     Arg::new("mirror")
