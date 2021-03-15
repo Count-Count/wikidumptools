@@ -4,15 +4,17 @@
 - facilitate cargo install
 
 ### wdet:
-- -d/--decompress
 - mirror-list
-- better downloading stats (percentage complete) with ETA
+- show percentage complete, time remaining
+- show compressed bytes during/in final stats
+- new options --bunzip2-binary, --bunzip2-options, --concurrency
 
 ### wdgrep
 - ci, more tests, coverage
 - set up benchmarking
 - README.md
 - filter by title: --intitle
+- kill decompress process on exit
 
 ## Long-term
 - refactor: main calls fn returning Result<()> for full control over dropping and exit code
@@ -62,7 +64,6 @@
 - --resume-partial/--keep-partial
 - automatically try again if intermittent network issue (or w/ --retry)?
 - verify (given files) subcommand
-- --target-dir/-t
 - tests?
 
 ## further ideas:
