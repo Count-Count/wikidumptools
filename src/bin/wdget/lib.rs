@@ -54,6 +54,10 @@ pub enum Error {
     AbortedByUser(),
     #[error("Target directory {0} does not exist")]
     TargetDirectoryDoesNotExist(PathBuf),
+    #[error("Decompressed file {0} cannot be verified")]
+    DecompressedFileCannotBeVerified(String),
+    #[error("Expected file {0} not found")]
+    FileToBeVerifiedNotFound(String),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -368,6 +372,54 @@ fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: boo
     Ok(())
 }
 
+fn get_target_file_path(target_directory: &Path, file_name: &str, decompress: bool) -> PathBuf {
+    let target_file_name = if decompress {
+        file_name.strip_suffix(".bz2").unwrap_or(file_name)
+    } else {
+        file_name
+    };
+    let mut target_file_pathbuf = target_directory.to_owned();
+    target_file_pathbuf.push(&target_file_name);
+    target_file_pathbuf
+}
+
+pub async fn verify<T>(client: &Client, wiki: &str, date: &str, dump_type: &str, target_directory: T) -> Result<()>
+where
+    T: AsRef<Path> + Send,
+{
+    let target_directory = target_directory.as_ref();
+    if !target_directory.exists() {
+        return Err(Error::TargetDirectoryDoesNotExist(target_directory.to_owned()));
+    }
+    let dump_status = get_dump_status(client, wiki, date).await?;
+    let job_info = dump_status.jobs.get(dump_type).ok_or(Error::DumpTypeNotFound())?;
+    if &job_info.status != "done" {
+        return Err(Error::DumpNotComplete());
+    }
+    let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
+    for (file_name, file_data) in files {
+        let target_file_path = get_target_file_path(target_directory, file_name, false);
+        if !target_file_path.exists() {
+            let decompressed_target_file_path = get_target_file_path(target_directory, file_name, true);
+            if decompressed_target_file_path.exists() {
+                return Err(Error::DecompressedFileCannotBeVerified(
+                    decompressed_target_file_path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                ));
+            } else {
+                return Err(Error::FileToBeVerifiedNotFound(
+                    target_file_path.file_name().unwrap().to_string_lossy().into_owned(),
+                ));
+            }
+        }
+        verify_existing_file(&target_file_path, file_data, true)?;
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct DownloadOptions<'a> {
     pub mirror: Option<&'a str>,
@@ -386,17 +438,6 @@ pub async fn download<T>(
 where
     T: AsRef<Path> + Send,
 {
-    fn get_target_file_path(target_directory: &Path, file_name: &str, decompress: bool) -> PathBuf {
-        let target_file_name = if decompress {
-            file_name.strip_suffix(".bz2").unwrap_or(file_name)
-        } else {
-            file_name
-        };
-        let mut target_file_pathbuf = target_directory.to_owned();
-        target_file_pathbuf.push(&target_file_name);
-        target_file_pathbuf
-    }
-
     let target_directory = target_directory.as_ref();
     if !target_directory.exists() {
         return Err(Error::TargetDirectoryDoesNotExist(target_directory.to_owned()));
@@ -419,7 +460,8 @@ where
             eprintln!(
                 "{} exists, skipping.",
                 target_file_path.file_name().unwrap().to_string_lossy()
-            )
+            );
+            continue;
         }
         let partfile_name = create_partfile_path(target_file_path.as_path());
         if let Some(ref mut len) = total_data_size {

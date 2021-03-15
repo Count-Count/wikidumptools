@@ -62,6 +62,17 @@ async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
     Ok(())
 }
 
+fn check_date_valid(date_spec: &str) -> Result<()> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex");
+    }
+    if RE.is_match(date_spec) {
+        Ok(())
+    } else {
+        Err(anyhow::Error::from(Error::InvalidDumpDate()))
+    }
+}
+
 async fn check_date_may_retrieve_latest(
     client: &Client,
     wiki: &str,
@@ -69,16 +80,9 @@ async fn check_date_may_retrieve_latest(
     dump_type: Option<&str>,
 ) -> Result<String> {
     if date_spec == "latest" {
-        return Ok(get_latest_available_date(client, wiki, dump_type).await?);
+        Ok(get_latest_available_date(client, wiki, dump_type).await?)
     } else {
-        lazy_static! {
-            static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex");
-        }
-        if RE.is_match(date_spec) {
-            Ok(date_spec.to_owned())
-        } else {
-            Err(anyhow::Error::from(Error::InvalidDumpDate()))
-        }
+        check_date_valid(date_spec).map(|_| date_spec.to_owned())
     }
 }
 
@@ -119,6 +123,13 @@ async fn run() -> Result<()> {
                         .long("decompress")
                         .about("Decompress .bz2 files during download"),
                 ),
+        )
+        .subcommand(
+            App::new("verify")
+                .about("Verify an already downloaded wiki dump")
+                .arg(wiki_name_arg.clone())
+                .arg(dump_date_arg.clone())
+                .arg(Arg::new("dump type").about("Type of the dump").required(true)),
         )
         .subcommand(App::new("list-wikis").about("List all wikis for which dumps are available"))
         .subcommand(
@@ -175,6 +186,15 @@ async fn run() -> Result<()> {
                 decompress: subcommand_matches.is_present("decompress"),
             };
             download(&client, wiki, &date, dump_type, current_dir, &download_options).await?
+        }
+        "verify" => {
+            let subcommand_matches = matches.subcommand_matches("verify").unwrap();
+            let wiki = subcommand_matches.value_of("wiki name").unwrap();
+            let date_spec = subcommand_matches.value_of("dump date").unwrap();
+            check_date_valid(date_spec)?;
+            let dump_type = subcommand_matches.value_of("dump type").unwrap();
+            let current_dir = current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?;
+            verify(&client, wiki, date_spec, dump_type, current_dir).await?
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }
