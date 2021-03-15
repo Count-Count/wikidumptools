@@ -98,9 +98,10 @@ async fn run() -> Result<()> {
         .version(crate_version!())
         .author(crate_authors!())
         .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
+        .setting(AppSettings::StrictUtf8)
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::DeriveDisplayOrder)
         .setting(AppSettings::VersionlessSubcommands)
+        .setting(AppSettings::DeriveDisplayOrder)
         .subcommand(
             App::new("download")
                 .about("Download a wiki dump")

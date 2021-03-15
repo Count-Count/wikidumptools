@@ -28,6 +28,7 @@ fn main() {
         .version(crate_version!())
         .author(crate_authors!())
         .about("Search through Wikipedia and other Wikimedia wiki dumps using regular expressions.")
+        .setting(AppSettings::StrictUtf8)
         .setting(AppSettings::ColoredHelp)
         .arg(Arg::new("search term").about("regex search term").required(true))
         .arg(
