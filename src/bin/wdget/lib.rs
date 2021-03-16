@@ -59,6 +59,8 @@ pub enum Error {
     DecompressedFileCannotBeVerified(String),
     #[error("Expected file {0} not found")]
     FileToBeVerifiedNotFound(String),
+    #[error("Could not send to progress channel")]
+    ProgressChannelSendError(#[from] tokio::sync::mpsc::error::SendError<DownloadProgress>),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -168,7 +170,7 @@ pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: O
 }
 
 #[derive(Debug)]
-enum DownloadProgress {
+pub enum DownloadProgress {
     BytesReadFromNet(u64),
     DecompressedBytesWrittenToDisk(u64),
 }
@@ -268,20 +270,14 @@ where
         let target_file_name = get_target_file_name(file_name, false);
         let target_file_path = get_file_in_dir(dump_files_directory, target_file_name);
         if !target_file_path.exists() {
-            let decompressed_target_file_path =
-                get_file_in_dir(dump_files_directory, get_target_file_name(file_name, true));
+            let decompressed_target_file_name = get_target_file_name(file_name, true);
+            let decompressed_target_file_path = get_file_in_dir(dump_files_directory, decompressed_target_file_name);
             if decompressed_target_file_path.exists() {
                 return Err(Error::DecompressedFileCannotBeVerified(
-                    decompressed_target_file_path
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .into_owned(),
+                    decompressed_target_file_name.to_owned(),
                 ));
             } else {
-                return Err(Error::FileToBeVerifiedNotFound(
-                    target_file_path.file_name().unwrap().to_string_lossy().into_owned(),
-                ));
+                return Err(Error::FileToBeVerifiedNotFound(target_file_name.to_owned()));
             }
         }
         verify_existing_file(&target_file_path, target_file_name, file_data, true)?;
@@ -314,11 +310,10 @@ async fn download_file(
     defer! {
         if partfile_path.is_file() {
             remove_file(&partfile_path)
-                .or_else::<(), _>(|err| {
-                    eprintln!("Could not remove {}: {}", partfile_path.file_name().unwrap().to_string_lossy(), &err);
-                    Ok(())
-                })
-                .unwrap();
+                .unwrap_or_else(|err| {
+                    // UNWRAP: safe since partfile_path.is_file()
+                    eprintln!("Could not remove temporary file {}: {}", partfile_path.file_name().unwrap().to_string_lossy(), &err);
+                });
         }
     }
 
@@ -334,7 +329,7 @@ async fn download_file(
             .spawn()
             .map_err(Error::DecompressorError)?;
 
-        let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin is None");
+        let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin should not be None");
         let copy_net_to_decompressor_in = async {
             while let Some(chunk) = r.chunk().await? {
                 if expected_sha1.is_some() {
@@ -344,14 +339,15 @@ async fn download_file(
                     .write_all(chunk.as_ref())
                     .await
                     .map_err(Error::DecompressorError)?;
-                progress_send
-                    .send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))
-                    .unwrap();
+                progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
             }
             decompressor_in.shutdown().await.map_err(Error::DecompressorError)
         };
 
-        let mut decompressor_out = decompressor.stdout.take().expect("Subprocess stdout is None");
+        let mut decompressor_out = decompressor
+            .stdout
+            .take()
+            .expect("Subprocess stdout should not be None");
         let partfile_path = partfile_path.clone(); // clone since captured
         let copy_decompressor_out_to_file = async move {
             let mut buf = Vec::with_capacity(65536);
@@ -404,9 +400,7 @@ async fn download_file(
             partfile.write_all(chunk.as_ref()).map_err(|e| {
                 Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
             })?;
-            progress_send
-                .send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))
-                .unwrap();
+            progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
         }
     }
 
@@ -466,13 +460,10 @@ where
     let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
     let mut total_data_size = Some(0_u64);
     for (file_name, file_data) in files {
-        let target_file_name = get_target_file_name(file_name, download_options.decompress);
-        let target_file_path = get_file_in_dir(target_directory, target_file_name);
+        let target_file_name = get_target_file_name(file_name, download_options.decompress).to_owned();
+        let target_file_path = get_file_in_dir(target_directory, target_file_name.as_str());
         if target_file_path.exists() {
-            eprintln!(
-                "{} exists, skipping.",
-                target_file_path.file_name().unwrap().to_string_lossy()
-            );
+            eprintln!("{} exists, skipping.", target_file_name);
             continue;
         }
         let part_file_path = get_file_in_dir(target_directory, (target_file_name.to_owned() + ".part").as_str());
@@ -496,7 +487,7 @@ where
             Some(file_data),
             progress_send.clone(),
         )
-        .map_ok(|_| target_file_path);
+        .map_ok(|_| (target_file_name, target_file_path));
         futures.push(download_res);
     }
 
@@ -534,10 +525,11 @@ where
             res = buffered.next() => {
                 match res {
                     Some(res) => {
-                        let finished_file = res?;
+                        let (finished_file_name, _) = res?;
                         if download_options.verbose {
                             eprint!("\r{:1$}\r","",last_printed_progress_len);
-                            eprintln!("Downloaded {}.", finished_file.file_name().unwrap().to_string_lossy());
+                            // UNWRAP: safe since partfile_path.is_file()
+                            eprintln!("Downloaded {}.", &finished_file_name);
                         }
                     },
                     None => break
@@ -613,7 +605,7 @@ pub async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<Stri
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
     lazy_static! {
         static ref RE: Regex = Regex::new(r#"<a href="([1-9][0-9]{7})/">([1-9][0-9]{7})/</a>"#)
-            .expect("Error parsing HTML dump date regex");
+            .expect("Error parsing HTML dump date regex constant");
     }
     let body = r.text().await?;
     let mut dates = Vec::with_capacity(10);
