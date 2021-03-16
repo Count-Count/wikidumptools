@@ -167,14 +167,6 @@ pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: O
     return Err(Error::NoDumpDatesFound());
 }
 
-fn get_file_name_expect(file_path: &Path) -> &str {
-    file_path
-        .file_name()
-        .expect("Path has no filename")
-        .to_str()
-        .expect("Filename is not in UTF-8")
-}
-
 #[derive(Debug)]
 enum DownloadProgress {
     BytesReadFromNet(u64),
@@ -195,8 +187,7 @@ fn get_file_in_dir(directory: &Path, file_name: &str) -> PathBuf {
     file
 }
 
-fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
-    let file_name = get_file_name_expect(file_path);
+fn verify_existing_file(file_path: &Path, file_name: &str, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
     let file_metadata = fs::metadata(file_path).map_err(|e| {
         Error::DumpFileAccessError(
             file_path.to_owned(),
@@ -274,7 +265,8 @@ where
     }
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     for (file_name, file_data) in files {
-        let target_file_path = get_file_in_dir(dump_files_directory, get_target_file_name(file_name, false));
+        let target_file_name = get_target_file_name(file_name, false);
+        let target_file_path = get_file_in_dir(dump_files_directory, target_file_name);
         if !target_file_path.exists() {
             let decompressed_target_file_path =
                 get_file_in_dir(dump_files_directory, get_target_file_name(file_name, true));
@@ -292,7 +284,7 @@ where
                 ));
             }
         }
-        verify_existing_file(&target_file_path, file_data, true)?;
+        verify_existing_file(&target_file_path, target_file_name, file_data, true)?;
     }
     Ok(())
 }
