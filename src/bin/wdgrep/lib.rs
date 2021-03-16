@@ -42,8 +42,6 @@ pub enum Error {
     UnexpectedEmptyTag(String),
     #[error("Could not get current directory: {0}")]
     CouldNotGetCurrentDir(std::io::Error),
-    #[error("File name not in UTF-8 format")]
-    FileNameNotInUtf8(),
     #[error("Dump file (or prefix) is invalid")]
     DumpFileOrPrefixInvalid(),
     #[error("No dump files found")]
