@@ -175,28 +175,24 @@ fn get_file_name_expect(file_path: &Path) -> &str {
         .expect("Filename is not in UTF-8")
 }
 
-fn create_partfile_path(file_path: &Path) -> PathBuf {
-    let part_file_name = get_file_name_expect(file_path).to_owned() + ".part";
-    let mut part_path = file_path.to_owned();
-    part_path.set_file_name(part_file_name);
-    part_path
-}
-
 #[derive(Debug)]
 enum DownloadProgress {
     BytesReadFromNet(u64),
     DecompressedBytesWrittenToDisk(u64),
 }
 
-fn get_target_file_path(target_directory: &Path, file_name: &str, decompress: bool) -> PathBuf {
-    let target_file_name = if decompress {
+fn get_target_file_name(file_name: &str, decompress: bool) -> &str {
+    if decompress {
         file_name.strip_suffix(".bz2").unwrap_or(file_name)
     } else {
         file_name
-    };
-    let mut target_file_pathbuf = target_directory.to_owned();
-    target_file_pathbuf.push(&target_file_name);
-    target_file_pathbuf
+    }
+}
+
+fn get_file_in_dir(directory: &Path, file_name: &str) -> PathBuf {
+    let mut file = directory.to_owned();
+    file.push(&file_name);
+    file
 }
 
 fn verify_existing_file(file_path: &Path, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
@@ -278,9 +274,10 @@ where
     }
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
     for (file_name, file_data) in files {
-        let target_file_path = get_target_file_path(dump_files_directory, file_name, false);
+        let target_file_path = get_file_in_dir(dump_files_directory, get_target_file_name(file_name, false));
         if !target_file_path.exists() {
-            let decompressed_target_file_path = get_target_file_path(dump_files_directory, file_name, true);
+            let decompressed_target_file_path =
+                get_file_in_dir(dump_files_directory, get_target_file_name(file_name, true));
             if decompressed_target_file_path.exists() {
                 return Err(Error::DecompressedFileCannotBeVerified(
                     decompressed_target_file_path
@@ -477,7 +474,8 @@ where
     let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
     let mut total_data_size = Some(0_u64);
     for (file_name, file_data) in files {
-        let target_file_path = get_target_file_path(target_directory, file_name, download_options.decompress);
+        let target_file_name = get_target_file_name(file_name, download_options.decompress);
+        let target_file_path = get_file_in_dir(target_directory, target_file_name);
         if target_file_path.exists() {
             eprintln!(
                 "{} exists, skipping.",
@@ -485,7 +483,7 @@ where
             );
             continue;
         }
-        let partfile_path = create_partfile_path(target_file_path.as_path());
+        let part_file_path = get_file_in_dir(target_directory, (target_file_name.to_owned() + ".part").as_str());
         if let Some(ref mut len) = total_data_size {
             match file_data.size {
                 Some(cur_len) => {
@@ -500,7 +498,7 @@ where
         let download_res = download_file(
             url,
             target_file_path.clone(),
-            partfile_path.to_owned(),
+            part_file_path.to_owned(),
             client,
             download_options.decompress,
             Some(file_data),
