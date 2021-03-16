@@ -185,7 +185,7 @@ fn create_partfile_path(file_path: &Path) -> PathBuf {
 #[derive(Debug)]
 enum DownloadProgress {
     BytesReadFromNet(u64),
-    BytesWrittenToDisk(u64),
+    DecompressedBytesWrittenToDisk(u64),
 }
 
 fn get_target_file_path(target_directory: &Path, file_name: &str, decompress: bool) -> PathBuf {
