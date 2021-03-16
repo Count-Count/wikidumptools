@@ -571,11 +571,12 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
                 let entry = entry?;
                 let metadata = entry.metadata()?;
                 if metadata.is_file() {
-                    let file_name = entry.file_name();
-                    let utf8_file_name = file_name.to_str().ok_or(Error::FileNameNotInUtf8())?;
-                    if utf8_file_name.starts_with(prefix) {
-                        dump_files.push(entry.path().to_str().ok_or(Error::FileNameNotInUtf8())?.to_owned());
-                        total_size += metadata.len();
+                    match (entry.file_name().to_str(), entry.path().to_str()) {
+                        (Some(utf8_file_name), Some(path)) if utf8_file_name.starts_with(prefix) => {
+                            dump_files.push(path.to_owned());
+                            total_size += metadata.len();
+                        }
+                        _ => {}
                     }
                 }
             }
