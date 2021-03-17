@@ -3,6 +3,7 @@
 ## High prio
 - facilitate cargo install
     - README.md
+- wdgrep: make sure only known dump filenames/prefixes can be searched
 
 ### wdget:
 - color?
@@ -14,6 +15,9 @@
 - bunzip2 via lib?
 - new options --bunzip2-binary, --bunzip2-options
 - gz, 7z decompression support
+- arg checking (disallow empty as well?)
+- no stdio output wdget lib
+- support incr(emental) dumps
 
 ### wdgrep
 - ci, more tests, coverage
