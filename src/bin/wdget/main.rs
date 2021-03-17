@@ -66,7 +66,7 @@ async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
 
 fn check_date_valid(date_spec: &str) -> Result<()> {
     lazy_static! {
-        static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex");
+        static ref RE: Regex = Regex::new("[1-9][0-9]{7}$").expect("Error parsing dump date regex constant");
     }
     if RE.is_match(date_spec) {
         Ok(())

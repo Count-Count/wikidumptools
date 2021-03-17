@@ -564,7 +564,7 @@ pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
                 .file_name()
                 .ok_or(Error::DumpFileOrPrefixInvalid())?
                 .to_str()
-                .unwrap(); // must be UTF-8 because split from UTF-8 path
+                .unwrap(); // UNWRAP: must be UTF-8 because split from UTF-8 path
             for entry in fs::read_dir(parent_dir)? {
                 let entry = entry?;
                 let metadata = entry.metadata()?;
