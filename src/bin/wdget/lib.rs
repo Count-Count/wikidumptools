@@ -285,6 +285,20 @@ where
     Ok(())
 }
 
+fn verify_hash(expected_sha1: Option<&String>, hasher: Sha1, file_path: &Path) -> Result<()> {
+    if let Some(expected_sha1) = expected_sha1 {
+        let sha1_bytes = hasher.finalize();
+        let actual_sha1 = format!("{:x}", sha1_bytes);
+        if expected_sha1 != &actual_sha1 {
+            return Err(Error::DumpFileAccessError(
+                file_path.to_owned(),
+                "SHA1 digest differs from the expected one.".to_owned(),
+            ));
+        };
+    }
+    Ok(())
+}
+
 async fn download_file(
     url: String,
     file_path: PathBuf,
@@ -318,7 +332,6 @@ async fn download_file(
     }
 
     let expected_sha1 = verify_file_data.and_then(|info| info.sha1.as_ref());
-    let mut hasher = Sha1::new();
 
     if decompress {
         let mut decompressor = Command::new("bunzip2")
@@ -330,7 +343,9 @@ async fn download_file(
             .map_err(Error::DecompressorError)?;
 
         let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin should not be None");
-        let copy_net_to_decompressor_in = async {
+        let file_path = file_path.clone(); // clone since captured
+        let copy_net_to_decompressor_in = async move {
+            let mut hasher = Sha1::new();
             while let Some(chunk) = r.chunk().await? {
                 if expected_sha1.is_some() {
                     hasher.update(chunk.as_ref());
@@ -341,6 +356,7 @@ async fn download_file(
                     .map_err(Error::DecompressorError)?;
                 progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
             }
+            verify_hash(expected_sha1, hasher, file_path.as_ref())?;
             decompressor_in.shutdown().await.map_err(Error::DecompressorError)
         };
 
@@ -393,6 +409,7 @@ async fn download_file(
             wait_for_decompressor_exit
         )?;
     } else {
+        let mut hasher = Sha1::new();
         while let Some(chunk) = r.chunk().await? {
             if expected_sha1.is_some() {
                 hasher.update(chunk.as_ref());
@@ -402,17 +419,7 @@ async fn download_file(
             })?;
             progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
         }
-    }
-
-    if let Some(expected_sha1) = expected_sha1 {
-        let sha1_bytes = hasher.finalize();
-        let actual_sha1 = format!("{:x}", sha1_bytes);
-        if expected_sha1 != &actual_sha1 {
-            return Err(Error::DumpFileAccessError(
-                file_path.to_owned(),
-                "SHA1 digest differs from the expected one.".to_owned(),
-            ));
-        };
+        verify_hash(expected_sha1, hasher, file_path.as_ref())?;
     }
 
     std::fs::rename(&partfile_path, &file_path).map_err(|e| {
