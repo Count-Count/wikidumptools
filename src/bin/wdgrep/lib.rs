@@ -22,13 +22,13 @@ use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor}
 
 macro_rules! buffer_write {
     ($dst:expr, $($arg:tt)*) => (
-        write!($dst, $($arg)*).expect("buffer write failed");
+        write!($dst, $($arg)*).unwrap();
     )
 }
 
 macro_rules! buffer_writeln {
     ($dst:expr, $($arg:tt)*) => (
-        writeln!($dst, $($arg)*).expect("buffer writeln failed");
+        writeln!($dst, $($arg)*).unwrap();
     )
 }
 
@@ -261,7 +261,7 @@ pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOp
             ThreadPoolBuilder::new()
                 .num_threads(thread_count.get())
                 .build_global()
-                .unwrap();
+                .expect("Could not initialize thread pool");
         }
     }
     let re = RegexBuilder::new(regex).build()?;
@@ -303,7 +303,7 @@ pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOp
                     .stdout(Stdio::piped())
                     .spawn()
                     .map_err(Error::SubCommandCouldNotBeStarted)?;
-                let stdout = handle.stdout.take().unwrap(); // we have stdout bcs of command config
+                let stdout = handle.stdout.take().unwrap(); // UNWRAP: we have stdout bcs of command config
                 let buf_size = 2 * 1024 * 1024;
                 let mut buf_reader = BufReader::with_capacity(buf_size, stdout);
                 let search_res = search_dump_reader(
