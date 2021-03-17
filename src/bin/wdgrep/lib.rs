@@ -20,6 +20,18 @@ use rayon::ThreadPoolBuilder;
 use regex::{Regex, RegexBuilder};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
+macro_rules! buffer_write {
+    ($dst:expr, $($arg:tt)*) => (
+        write!($dst, $($arg)*).expect("buffer write failed");
+    )
+}
+
+macro_rules! buffer_writeln {
+    ($dst:expr, $($arg:tt)*) => (
+        writeln!($dst, $($arg)*).expect("buffer writeln failed");
+    )
+}
+
 #[inline(always)]
 fn from_utf8(v: &[u8]) -> Result<&str> {
     std::str::from_utf8(v).map_err(Error::Utf8)
@@ -430,11 +442,11 @@ fn search_dump_reader<B: BufRead>(
                                 if only_print_title_and_revision {
                                     if re.is_match(text) {
                                         set_color(&mut stdout_buffer, Color::Cyan);
-                                        write!(&mut stdout_buffer, "{}", title.as_str()).unwrap();
+                                        buffer_write!(&mut stdout_buffer, "{}", title.as_str());
                                         set_plain(&mut stdout_buffer);
-                                        write!(&mut stdout_buffer, "@").unwrap();
+                                        buffer_write!(&mut stdout_buffer, "@");
                                         set_color(&mut stdout_buffer, Color::Yellow);
-                                        writeln!(&mut stdout_buffer, "{}", revision_id.as_str()).unwrap();
+                                        buffer_write!(&mut stdout_buffer, "{}", revision_id.as_str());
                                         set_plain(&mut stdout_buffer);
                                         stdout_writer.print(&stdout_buffer).unwrap();
                                         stdout_buffer.clear();
@@ -470,11 +482,11 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
         if first_match {
             // print title once
             set_color(buffer, Color::Cyan);
-            write!(buffer, "{}", title).unwrap();
+            buffer_write!(buffer, "{}", title);
             set_plain(buffer);
-            write!(buffer, "@").unwrap();
+            buffer_write!(buffer, "@");
             set_color(buffer, Color::Yellow);
-            writeln!(buffer, "{}", revision_id).unwrap();
+            buffer_writeln!(buffer, "{}", revision_id);
             set_plain(buffer);
         }
 
@@ -483,7 +495,7 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
                 // match starting on same line that the last match ended
 
                 // print text between matches
-                write!(buffer, "{}", &text[last_match_end..m.start()]).unwrap();
+                buffer_write!(buffer, "{}", &text[last_match_end..m.start()]);
             }
             Some(pos) => {
                 // match starting on a new line
@@ -495,12 +507,12 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
                             panic!("Memchr/Memrchr inconsistency");
                         }
                         Some(pos) => {
-                            writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                            buffer_writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]);
                         }
                     }
                 }
                 // print text in line preceding match
-                write!(buffer, "{}", &text[last_match_end + pos + 1..m.start()]).unwrap();
+                buffer_write!(buffer, "{}", &text[last_match_end + pos + 1..m.start()]);
             }
         };
         // print matched text
@@ -512,7 +524,7 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
             m.end()
         };
         set_color(buffer, Color::Red);
-        write!(buffer, "{}", &text[m.start()..actual_match_end]).unwrap();
+        buffer_write!(buffer, "{}", &text[m.start()..actual_match_end]);
         set_plain(buffer);
         last_match_end = actual_match_end;
         if first_match {
@@ -524,10 +536,10 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
         // print rest of last matching line
         match memchr(b'\n', &text.as_bytes()[last_match_end..]) {
             None => {
-                writeln!(buffer, "{}", &text[last_match_end..]).unwrap();
+                buffer_writeln!(buffer, "{}", &text[last_match_end..]);
             }
             Some(pos) => {
-                writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]).unwrap();
+                buffer_writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]);
             }
         }
         // separate from next match
