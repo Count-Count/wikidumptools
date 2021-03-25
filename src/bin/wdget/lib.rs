@@ -344,20 +344,23 @@ async fn download_file(
 
         let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin should not be None");
         let file_path = file_path.clone(); // clone since captured
-        let copy_net_to_decompressor_in = async move {
-            let mut hasher = Sha1::new();
-            while let Some(chunk) = r.chunk().await? {
-                if expected_sha1.is_some() {
-                    hasher.update(chunk.as_ref());
+        let copy_net_to_decompressor_in = {
+            let progress_send = progress_send.clone();
+            async move {
+                let mut hasher = Sha1::new();
+                while let Some(chunk) = r.chunk().await? {
+                    if expected_sha1.is_some() {
+                        hasher.update(chunk.as_ref());
+                    }
+                    decompressor_in
+                        .write_all(chunk.as_ref())
+                        .await
+                        .map_err(Error::DecompressorError)?;
+                    progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
                 }
-                decompressor_in
-                    .write_all(chunk.as_ref())
-                    .await
-                    .map_err(Error::DecompressorError)?;
-                progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
+                verify_hash(expected_sha1, hasher, file_path.as_ref())?;
+                decompressor_in.shutdown().await.map_err(Error::DecompressorError)
             }
-            verify_hash(expected_sha1, hasher, file_path.as_ref())?;
-            decompressor_in.shutdown().await.map_err(Error::DecompressorError)
         };
 
         let mut decompressor_out = decompressor
@@ -377,6 +380,7 @@ async fn download_file(
                         Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
                     })?;
                     buf.clear();
+                    progress_send.send(DownloadProgress::DecompressedBytesWrittenToDisk(read_len as u64))?;
                 } else {
                     break;
                 }
@@ -527,6 +531,7 @@ where
     let mut prev_bytes_received = 0_u64;
     let mut last_printed_progress_len = 0;
     let mut bytes_received = 0_u64;
+    let mut decompressed_bytes_written = 0_u64;
     loop {
         select! {
             res = buffered.next() => {
@@ -546,8 +551,14 @@ where
                 return Err(Error::AbortedByUser());
             }
             download_progress = progress_receive.recv() => {
-                if let Some(DownloadProgress::BytesReadFromNet(count)) = download_progress {
-                    bytes_received += count;
+                match download_progress {
+                    Some(DownloadProgress::BytesReadFromNet(count)) => {
+                        bytes_received += count;
+                    },
+                    Some(DownloadProgress::DecompressedBytesWrittenToDisk(count)) => {
+                        decompressed_bytes_written += count;
+                    },
+                    None => {}
                 }
             }
             _ = progress_update_interval.tick() => {
@@ -593,16 +604,16 @@ where
     if download_options.verbose {
         let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
         let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
-        eprintln!(
-            "\rDownloaded {}{:.2} MiB ({:.2} MiB/s).",
-            if download_options.decompress {
-                "and decompressed "
-            } else {
-                ""
-            },
-            total_mib,
-            mib_per_sec
-        );
+        if download_options.decompress {
+            eprintln!(
+                "\rDownloaded {:.2} MiB ({:.2} MiB/s) and decompressed to {:.2} MiB.",
+                total_mib,
+                mib_per_sec,
+                decompressed_bytes_written as f64 / 1024.0 / 1024.0
+            );
+        } else {
+            eprintln!("\rDownloaded {:.2} MiB ({:.2} MiB/s).", total_mib, mib_per_sec);
+        }
     }
     Ok(())
 }
