@@ -170,7 +170,6 @@ async fn run() -> Result<()> {
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg),
         )
-        .subcommand(App::new("list-mirrors").about("List available mirrors"))
         .get_matches();
 
     let _color_choice = if atty::is(atty::Stream::Stdout) {
