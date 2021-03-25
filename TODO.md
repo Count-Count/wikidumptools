@@ -7,17 +7,14 @@
 
 ### wdget:
 - color?
-- show compressed bytes during/in final stats
 - verify existing files by default, add --no-verify flag
-- utf8 handling cleanup -> camino 1.0.3
-
 - quiet (no progress) if no terminal connected
 - bunzip2 via lib?
 - new options --bunzip2-binary, --bunzip2-options
 - gz, 7z decompression support
 - arg checking (disallow empty as well?)
 - no stdio output wdget lib
-- support incr(emental) dumps
+- support updating from incr(emental) dumps
 
 ### wdgrep
 - ci, more tests, coverage
@@ -25,6 +22,8 @@
 - README.md
 - filter by title: --intitle
 - kill decompress process on exit
+- remove unintuitive dump prefix arg syntax
+- only show revision in multi-revision search
 
 ## Long-term
 - refactor: main calls fn returning Result<()> for full control over dropping and exit code
@@ -42,6 +41,7 @@
 - clap_generate
 - use (color-)eyre instead of anyhow for backtraces
 - support multiple regex engines/regex engine switching
+- parquet/duckdb export
 
 ### Full dump only improvements
 - only useful for full dump: filter by user, comment, minor, timestamp (between, before, after, --as-of)
