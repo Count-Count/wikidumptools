@@ -307,6 +307,8 @@ async fn download_file(
     verify_file_data: Option<&DumpFileInfo>,
     progress_send: UnboundedSender<DownloadProgress>,
 ) -> Result<()> {
+    use DownloadProgress::*;
+
     let mut r = client.get(url).send().await?.error_for_status()?;
     let mut partfile = OpenOptions::new()
         .create(true)
@@ -324,7 +326,7 @@ async fn download_file(
     defer! {
         if partfile_path.is_file() {
             if let Err(err) = remove_file(&partfile_path) {
-                progress_send_clone.send(DownloadProgress::CouldNotRemoveTempFile(partfile_path.clone(), partfile_path.file_name().unwrap().to_string_lossy().to_string(), err)).ok();
+                progress_send_clone.send(CouldNotRemoveTempFile(partfile_path.clone(), partfile_path.file_name().unwrap().to_string_lossy().to_string(), err)).ok();
             }
         }
     }
@@ -354,7 +356,7 @@ async fn download_file(
                         .write_all(chunk.as_ref())
                         .await
                         .map_err(Error::DecompressorError)?;
-                    progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
+                    progress_send.send(BytesReadFromNet(chunk.len() as u64))?;
                 }
                 verify_hash(expected_sha1, hasher, file_path.as_ref())?;
                 decompressor_in.shutdown().await.map_err(Error::DecompressorError)
@@ -378,7 +380,7 @@ async fn download_file(
                         Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
                     })?;
                     buf.clear();
-                    progress_send.send(DownloadProgress::DecompressedBytesWrittenToDisk(read_len as u64))?;
+                    progress_send.send(DecompressedBytesWrittenToDisk(read_len as u64))?;
                 } else {
                     break;
                 }
@@ -419,7 +421,7 @@ async fn download_file(
             partfile.write_all(chunk.as_ref()).map_err(|e| {
                 Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
             })?;
-            progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
+            progress_send.send(BytesReadFromNet(chunk.len() as u64))?;
         }
         verify_hash(expected_sha1, hasher, file_path.as_ref())?;
     }
