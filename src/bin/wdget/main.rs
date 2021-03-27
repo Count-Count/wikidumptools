@@ -7,9 +7,13 @@
 mod lib;
 
 use std::env::current_dir;
+use std::io::Write;
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
+use std::time::Instant;
+use tokio::sync::mpsc::unbounded_channel;
+use tokio::time;
 
 use anyhow::{anyhow, bail, Result};
 use clap::{crate_authors, crate_version, App, AppSettings, Arg};
@@ -18,6 +22,7 @@ use lib::*;
 use regex::Regex;
 use reqwest::Client;
 use termcolor::ColorChoice;
+use tokio::{pin, select};
 
 fn create_client() -> Result<Client> {
     Ok(reqwest::Client::builder()
@@ -86,6 +91,135 @@ async fn check_date_may_retrieve_latest(
     } else {
         check_date_valid(date_spec).map(|_| date_spec.to_owned())
     }
+}
+
+async fn download<T>(
+    client: &Client,
+    wiki: &str,
+    date: &str,
+    dump_type: &str,
+    target_directory: T,
+    download_options: &DownloadOptions<'_>,
+) -> Result<()>
+where
+    T: AsRef<Path> + Send,
+{
+    use DownloadProgress::*;
+    let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
+    let download_fut = download1(
+        client,
+        wiki,
+        date,
+        dump_type,
+        target_directory,
+        download_options,
+        progress_send,
+    );
+    pin!(download_fut);
+
+    let progress_update_period = time::Duration::from_secs(1);
+    let mut progress_update_interval = time::interval_at(
+        tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
+        progress_update_period,
+    );
+    let start_time = Instant::now();
+    let mut prev_time = Instant::now();
+    let mut prev_bytes_received = 0_u64;
+    let mut last_printed_progress_len = 0;
+    let mut bytes_received = 0_u64;
+    let mut decompressed_bytes_written = 0_u64;
+    let mut total_data_size: Option<u64> = None;
+    loop {
+        select! {
+            download_res = &mut download_fut => {
+                download_res?;
+                break;
+            }
+            _ = tokio::signal::ctrl_c() => {
+                return Err(anyhow::Error::from(lib::Error::AbortedByUser()));
+            }
+            download_progress = progress_receive.recv() => {
+                match download_progress {
+                    Some(BytesReadFromNet(count)) => {
+                        bytes_received += count;
+                    },
+                    Some(DecompressedBytesWrittenToDisk(count)) => {
+                        decompressed_bytes_written += count;
+                    },
+                    Some(TotalDownloadSize(size)) => {
+                        total_data_size.replace(size);
+                    },
+                    Some(ExistingFileIgnored(_path, file_name)) => {
+                        eprintln!("{} exists, skipping.", file_name);
+                    },
+                    Some(FileFinished(_path, file_name)) => {
+                        if download_options.verbose {
+                            eprint!("\r{:1$}\r","",last_printed_progress_len);
+                            eprintln!("Downloaded {}.", &file_name);
+                        }
+                    },
+                    Some(CouldNotRemoveTempFile(_path, file_name, error)) => {
+                        eprintln!("Could not remove temporary file {}: {}", file_name, &error);
+                    }
+                    None => {}
+                }
+            }
+            _ = progress_update_interval.tick() => {
+                if download_options.verbose {
+                    let speed =
+                    if bytes_received - prev_bytes_received != 0  {
+                        let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
+                        std::format!("({:.2} MiB/s)", mib_per_sec)
+                    } else {
+                        std::format!("(stalled)")
+                    };
+                    let mut progress_string =
+                        if let Some(total_data_size) = total_data_size {
+                            let total_mib = total_data_size as f64 / 1024.0 / 1024.0;
+                            std::format!(
+                                "\rDownloading {}- {:.2} MiB ({} %) of {:.2} MiB downloaded {}.",
+                                if download_options.decompress {"and decompressing "} else {""},
+                                bytes_received as f64 / 1024.0 / 1024.0,
+                                bytes_received * 100 / total_data_size,
+                                total_mib,
+                                speed)
+                        } else {
+                            std::format!(
+                                "\rDownloading {}- {:.2} MiB downloaded {}.",
+                                if download_options.decompress {"and decompressing "} else {""},
+                                bytes_received as f64 / 1024.0 / 1024.0,
+                                speed)
+                        };
+                    let new_printed_progress_len = progress_string.chars().count();
+                    for _ in new_printed_progress_len..last_printed_progress_len {
+                        progress_string.push(' ');
+                    }
+                    eprint!("{}", progress_string);
+                    std::io::stderr().flush().unwrap();
+                    last_printed_progress_len = new_printed_progress_len;
+                    prev_bytes_received = bytes_received;
+                    prev_time = Instant::now();
+                }
+            }
+
+        }
+    }
+    if download_options.verbose {
+        let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
+        let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
+        if download_options.decompress {
+            eprintln!(
+                "\rDownloaded {:.2} MiB ({:.2} MiB/s) and decompressed to {:.2} MiB.",
+                total_mib,
+                mib_per_sec,
+                decompressed_bytes_written as f64 / 1024.0 / 1024.0
+            );
+        } else {
+            eprintln!("\rDownloaded {:.2} MiB ({:.2} MiB/s).", total_mib, mib_per_sec);
+        }
+    }
+
+    Ok(())
 }
 
 async fn run() -> Result<()> {

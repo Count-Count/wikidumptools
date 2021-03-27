@@ -24,8 +24,7 @@ use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-use tokio::{select, time};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -167,12 +166,6 @@ pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: O
         }
     }
     return Err(Error::NoDumpDatesFound());
-}
-
-#[derive(Debug)]
-pub enum DownloadProgress {
-    BytesReadFromNet(u64),
-    DecompressedBytesWrittenToDisk(u64),
 }
 
 fn get_target_file_name(file_name: &str, decompress: bool) -> &str {
@@ -321,13 +314,12 @@ async fn download_file(
             )
         })?;
 
+    let progress_send_clone = progress_send.clone();
     defer! {
         if partfile_path.is_file() {
-            remove_file(&partfile_path)
-                .unwrap_or_else(|err| {
-                    // UNWRAP: safe since partfile_path.is_file()
-                    eprintln!("Could not remove temporary file {}: {}", partfile_path.file_name().unwrap().to_string_lossy(), &err);
-                });
+            if let Err(err) = remove_file(&partfile_path) {
+                progress_send_clone.send(DownloadProgress::CouldNotRemoveTempFile(partfile_path.clone(), partfile_path.file_name().unwrap().to_string_lossy().to_string(), err)).ok();
+            }
         }
     }
 
@@ -443,13 +435,24 @@ pub struct DownloadOptions<'a> {
     pub concurrency: Option<NonZeroUsize>,
 }
 
-pub async fn download<T>(
+#[derive(Debug)]
+pub enum DownloadProgress {
+    TotalDownloadSize(u64),
+    BytesReadFromNet(u64),
+    DecompressedBytesWrittenToDisk(u64),
+    ExistingFileIgnored(PathBuf, String),
+    CouldNotRemoveTempFile(PathBuf, String, std::io::Error),
+    FileFinished(PathBuf, String),
+}
+
+pub async fn download1<T>(
     client: &Client,
     wiki: &str,
     date: &str,
     dump_type: &str,
     target_directory: T,
     download_options: &DownloadOptions<'_>,
+    progress_send: UnboundedSender<DownloadProgress>,
 ) -> Result<()>
 where
     T: AsRef<Path> + Send,
@@ -468,13 +471,15 @@ where
 
     // create futures for missing files
     let mut futures = Vec::with_capacity(files.len());
-    let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
     let mut total_data_size = Some(0_u64);
     for (file_name, file_data) in files {
         let target_file_name = get_target_file_name(file_name, download_options.decompress).to_owned();
         let target_file_path = get_file_in_dir(target_directory, target_file_name.as_str());
         if target_file_path.exists() {
-            eprintln!("{} exists, skipping.", target_file_name);
+            progress_send.send(DownloadProgress::ExistingFileIgnored(
+                target_file_path,
+                target_file_name,
+            ))?;
             continue;
         }
         let part_file_path = get_file_in_dir(target_directory, (target_file_name.to_owned() + ".part").as_str());
@@ -501,6 +506,9 @@ where
         .map_ok(|_| (target_file_name, target_file_path));
         futures.push(download_res);
     }
+    if let Some(total_data_size) = total_data_size {
+        progress_send.send(DownloadProgress::TotalDownloadSize(total_data_size))?;
+    }
 
     // download missing files
     let stream_of_downloads = stream::iter(futures);
@@ -520,101 +528,11 @@ where
         |n| n.get(),
     );
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
-
-    let progress_update_period = time::Duration::from_secs(1);
-    let mut progress_update_interval = time::interval_at(
-        tokio::time::Instant::now() + tokio::time::Duration::from_secs(1),
-        progress_update_period,
-    );
-    let start_time = Instant::now();
-    let mut prev_time = Instant::now();
-    let mut prev_bytes_received = 0_u64;
-    let mut last_printed_progress_len = 0;
-    let mut bytes_received = 0_u64;
-    let mut decompressed_bytes_written = 0_u64;
-    loop {
-        select! {
-            res = buffered.next() => {
-                match res {
-                    Some(res) => {
-                        let (finished_file_name, _) = res?;
-                        if download_options.verbose {
-                            eprint!("\r{:1$}\r","",last_printed_progress_len);
-                            // UNWRAP: safe since partfile_path.is_file()
-                            eprintln!("Downloaded {}.", &finished_file_name);
-                        }
-                    },
-                    None => break
-                }
-            }
-            _ = tokio::signal::ctrl_c() => {
-                return Err(Error::AbortedByUser());
-            }
-            download_progress = progress_receive.recv() => {
-                match download_progress {
-                    Some(DownloadProgress::BytesReadFromNet(count)) => {
-                        bytes_received += count;
-                    },
-                    Some(DownloadProgress::DecompressedBytesWrittenToDisk(count)) => {
-                        decompressed_bytes_written += count;
-                    },
-                    None => {}
-                }
-            }
-            _ = progress_update_interval.tick() => {
-                if download_options.verbose {
-                    let speed =
-                    if bytes_received - prev_bytes_received != 0  {
-                        let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                        std::format!("({:.2} MiB/s)", mib_per_sec)
-                    } else {
-                        std::format!("(stalled)")
-                    };
-                    let mut progress_string =
-                        if let Some(total_data_size) = total_data_size {
-                            let total_mib = total_data_size as f64 / 1024.0 / 1024.0;
-                            std::format!(
-                                "\rDownloading {}- {:.2} MiB ({} %) of {:.2} MiB downloaded {}.",
-                                if download_options.decompress {"and decompressing "} else {""},
-                                bytes_received as f64 / 1024.0 / 1024.0,
-                                bytes_received * 100 / total_data_size,
-                                total_mib,
-                                speed)
-                        } else {
-                            std::format!(
-                                "\rDownloading {}- {:.2} MiB downloaded {}.",
-                                if download_options.decompress {"and decompressing "} else {""},
-                                bytes_received as f64 / 1024.0 / 1024.0,
-                                speed)
-                        };
-                    let new_printed_progress_len = progress_string.chars().count();
-                    for _ in new_printed_progress_len..last_printed_progress_len {
-                        progress_string.push(' ');
-                    }
-                    eprint!("{}", progress_string);
-                    std::io::stderr().flush().unwrap();
-                    last_printed_progress_len = new_printed_progress_len;
-                    prev_bytes_received = bytes_received;
-                    prev_time = Instant::now();
-                }
-            }
-
-        }
+    while let Some(res) = buffered.next().await {
+        let (finished_file_name, finished_file_path) = res?;
+        progress_send.send(DownloadProgress::FileFinished(finished_file_path, finished_file_name))?;
     }
-    if download_options.verbose {
-        let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
-        let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
-        if download_options.decompress {
-            eprintln!(
-                "\rDownloaded {:.2} MiB ({:.2} MiB/s) and decompressed to {:.2} MiB.",
-                total_mib,
-                mib_per_sec,
-                decompressed_bytes_written as f64 / 1024.0 / 1024.0
-            );
-        } else {
-            eprintln!("\rDownloaded {:.2} MiB ({:.2} MiB/s).", total_mib, mib_per_sec);
-        }
-    }
+
     Ok(())
 }
 
