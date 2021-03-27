@@ -1,5 +1,5 @@
 [workspace]
-mesolver = "2"
+resolver = "2"
 
 members = [
     "spikes/update",
