@@ -436,7 +436,6 @@ async fn download_file(
 #[derive(Default)]
 pub struct DownloadOptions<'a> {
     pub mirror: Option<&'a str>,
-    pub verbose: bool,
     pub decompress: bool,
     pub concurrency: Option<NonZeroUsize>,
 }

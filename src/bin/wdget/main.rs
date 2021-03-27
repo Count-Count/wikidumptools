@@ -100,6 +100,8 @@ async fn download<T>(
     dump_type: &str,
     target_directory: T,
     download_options: &DownloadOptions<'_>,
+    show_progress: bool,
+    show_warnings: bool,
 ) -> Result<()>
 where
     T: AsRef<Path> + Send,
@@ -153,17 +155,21 @@ where
                         total_data_size.replace(size);
                     },
                     Some(ExistingFileIgnored(_path, file_name)) => {
-                        eprintln!("{} exists, skipping.", file_name);
+                        if show_warnings {
+                            eprintln!("{} exists, skipping.", file_name);
+                        }
                     },
                     Some(FileFinished(_path, file_name)) => {
-                        if download_options.verbose {
+                        if show_progress {
                             eprint!("\r{:1$}\r","",last_printed_progress_len);
                             eprintln!("Completed download of {}.", &file_name);
                             downloaded_file_count += 1;
                         }
                     },
                     Some(CouldNotRemoveTempFile(_path, file_name, error)) => {
-                        eprintln!("Could not remove temporary file {}: {}", file_name, &error);
+                        if show_warnings {
+                            eprintln!("Could not remove temporary file {}: {}", file_name, &error);
+                        }
                     }
                     None => {
                         progress_reporting_finished = true;
@@ -171,7 +177,7 @@ where
                 }
             }
             _ = progress_update_interval.tick() => {
-                if download_options.verbose {
+                if show_progress {
                     let speed =
                     if bytes_received - prev_bytes_received != 0  {
                         let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
@@ -210,7 +216,7 @@ where
 
         }
     }
-    if download_options.verbose {
+    if show_progress {
         if downloaded_file_count > 0 {
             let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
             let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
@@ -376,11 +382,22 @@ async fn run() -> Result<()> {
 
             let download_options = DownloadOptions {
                 mirror,
-                verbose: !matches.is_present("quiet"),
                 decompress: subcommand_matches.is_present("decompress"),
                 concurrency,
             };
-            download(&client, wiki, &date, dump_type, target_dir, &download_options).await?
+            let show_progress = !subcommand_matches.is_present("quiet") && atty::is(atty::Stream::Stderr);
+            let show_warnings = !subcommand_matches.is_present("quiet");
+            download(
+                &client,
+                wiki,
+                &date,
+                dump_type,
+                target_dir,
+                &download_options,
+                show_progress,
+                show_warnings,
+            )
+            .await?
         }
         "verify" => {
             let subcommand_matches = matches.subcommand_matches("verify").unwrap();
