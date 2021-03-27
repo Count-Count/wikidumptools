@@ -158,7 +158,7 @@ where
                     Some(FileFinished(_path, file_name)) => {
                         if download_options.verbose {
                             eprint!("\r{:1$}\r","",last_printed_progress_len);
-                            eprintln!("Downloaded {}.", &file_name);
+                            eprintln!("Completed download of {}.", &file_name);
                             downloaded_file_count += 1;
                         }
                     },
