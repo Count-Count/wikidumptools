@@ -395,7 +395,7 @@ async fn run() -> Result<()> {
             if !dump_files_dir.is_dir() {
                 bail!("Dump files directory does not exist or is not accessible.")
             };
-            verify(&client, wiki, date_spec, dump_type, dump_files_dir).await?
+            verify_downloaded_dump(&client, wiki, date_spec, dump_type, dump_files_dir).await?
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }

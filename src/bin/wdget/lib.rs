@@ -245,7 +245,13 @@ fn verify_existing_file(file_path: &Path, file_name: &str, file_data: &DumpFileI
     Ok(())
 }
 
-pub async fn verify<T>(client: &Client, wiki: &str, date: &str, dump_type: &str, dump_files_directory: T) -> Result<()>
+pub async fn verify_downloaded_dump<T>(
+    client: &Client,
+    wiki: &str,
+    date: &str,
+    dump_type: &str,
+    dump_files_directory: T,
+) -> Result<()>
 where
     T: AsRef<Path> + Send,
 {
