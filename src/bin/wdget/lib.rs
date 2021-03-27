@@ -50,7 +50,7 @@ pub enum Error {
     InvalidDumpDate(),
     #[error("Error accessing file {0} - {1}")]
     DumpFileAccessError(PathBuf, String),
-    #[error("Aborted by user")]
+    #[error("Aborted by the user")]
     AbortedByUser(),
     #[error("Target directory {0} does not exist")]
     TargetDirectoryDoesNotExist(PathBuf),
