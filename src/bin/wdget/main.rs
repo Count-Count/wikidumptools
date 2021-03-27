@@ -129,16 +129,19 @@ where
     let mut bytes_received = 0_u64;
     let mut decompressed_bytes_written = 0_u64;
     let mut total_data_size: Option<u64> = None;
-    loop {
+    let mut download_finished = false;
+    let mut progress_reporting_finished = false;
+    let mut downloaded_file_count = 0;
+    while !download_finished || !progress_reporting_finished {
         select! {
-            download_res = &mut download_fut => {
+            download_res = &mut download_fut, if !download_finished => {
                 download_res?;
-                break;
+                download_finished = true;
             }
             _ = tokio::signal::ctrl_c() => {
                 return Err(anyhow::Error::from(lib::Error::AbortedByUser()));
             }
-            download_progress = progress_receive.recv() => {
+            download_progress = progress_receive.recv(), if !progress_reporting_finished => {
                 match download_progress {
                     Some(BytesReadFromNet(count)) => {
                         bytes_received += count;
@@ -156,12 +159,15 @@ where
                         if download_options.verbose {
                             eprint!("\r{:1$}\r","",last_printed_progress_len);
                             eprintln!("Downloaded {}.", &file_name);
+                            downloaded_file_count += 1;
                         }
                     },
                     Some(CouldNotRemoveTempFile(_path, file_name, error)) => {
                         eprintln!("Could not remove temporary file {}: {}", file_name, &error);
                     }
-                    None => {}
+                    None => {
+                        progress_reporting_finished = true;
+                    }
                 }
             }
             _ = progress_update_interval.tick() => {
@@ -205,17 +211,21 @@ where
         }
     }
     if download_options.verbose {
-        let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
-        let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
-        if download_options.decompress {
-            eprintln!(
-                "\rDownloaded {:.2} MiB ({:.2} MiB/s) and decompressed to {:.2} MiB.",
-                total_mib,
-                mib_per_sec,
-                decompressed_bytes_written as f64 / 1024.0 / 1024.0
-            );
+        if downloaded_file_count > 0 {
+            let total_mib = bytes_received as f64 / 1024.0 / 1024.0;
+            let mib_per_sec = total_mib / start_time.elapsed().as_secs_f64();
+            if download_options.decompress {
+                eprintln!(
+                    "\rDownloaded {:.2} MiB ({:.2} MiB/s) and decompressed to {:.2} MiB.",
+                    total_mib,
+                    mib_per_sec,
+                    decompressed_bytes_written as f64 / 1024.0 / 1024.0
+                );
+            } else {
+                eprintln!("\rDownloaded {:.2} MiB ({:.2} MiB/s).", total_mib, mib_per_sec);
+            }
         } else {
-            eprintln!("\rDownloaded {:.2} MiB ({:.2} MiB/s).", total_mib, mib_per_sec);
+            eprintln!("No files downloaded.");
         }
     }
 
