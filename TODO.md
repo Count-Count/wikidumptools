@@ -7,8 +7,6 @@
 
 ### wdget:
 - color?
-- verify existing files by default, add --no-verify flag
-- quiet (no progress) if no terminal connected
 - bunzip2 via lib?
 - new options --bunzip2-binary, --bunzip2-options
 - gz, 7z decompression support
