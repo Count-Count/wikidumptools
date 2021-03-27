@@ -445,7 +445,7 @@ pub enum DownloadProgress {
     FileFinished(PathBuf, String),
 }
 
-pub async fn download1<T>(
+pub async fn download_dump<T>(
     client: &Client,
     wiki: &str,
     date: &str,

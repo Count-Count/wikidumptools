@@ -106,7 +106,7 @@ where
 {
     use DownloadProgress::*;
     let (progress_send, mut progress_receive) = unbounded_channel::<DownloadProgress>();
-    let download_fut = download1(
+    let download_fut = download_dump(
         client,
         wiki,
         date,
