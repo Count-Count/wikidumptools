@@ -7,11 +7,12 @@
 mod verify;
 
 use std::env::current_dir;
-use std::io::Write;
+use std::io::{stdout, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::Instant;
+use tabwriter::TabWriter;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::time;
 
@@ -37,9 +38,12 @@ fn create_client() -> Result<Client> {
 async fn list_wikis(client: &Client) -> Result<()> {
     let mut wikis = get_available_wikis_from_wikidata(client).await?;
     wikis.sort_unstable_by(|e1, e2| e1.id.cmp(&e2.id));
+    let mut tw = TabWriter::new(stdout());
+    writeln!(tw, "Wiki\tDescription").unwrap();
     for ref wiki in wikis {
-        println!("{} - {}", wiki.id.as_str(), wiki.name.as_str());
+        writeln!(tw, "{}\t{}", wiki.id.as_str(), wiki.name.as_str()).unwrap();
     }
+    tw.flush().unwrap();
     Ok(())
 }
 
@@ -53,19 +57,25 @@ async fn list_dates(client: &Client, wiki: &str) -> Result<()> {
 
 async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
     let dump_status = get_dump_status(client, wiki, date).await?;
+    let mut tw = TabWriter::new(stdout());
+    writeln!(tw, "Dump\tStatus\t#Files\tSize").unwrap();
     for (job_name, job_info) in &dump_status.jobs {
         if let Some(files) = &job_info.files {
             let sum = files.values().map(|info| info.size.unwrap_or(0)).sum::<u64>();
-            println!(
-                "{} - status: {} - size: {:.2} MiB",
+            writeln!(
+                tw,
+                "{}\t{}\t{} files\t{:.2} MiB",
                 &job_name,
                 &job_info.status,
+                files.len(),
                 sum as f64 / 1024.0 / 1024.0
-            );
+            )
+            .unwrap();
         } else {
-            println!("{} - status: {}", &job_name, &job_info.status);
+            writeln!(tw, "{}\t{}", &job_name, &job_info.status).unwrap();
         }
     }
+    tw.flush().unwrap();
     Ok(())
 }
 
