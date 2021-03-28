@@ -2160,6 +2160,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7148f4696fb4960a346eaa60bbfb42a1ac4ebba21f750f75fc1375b098d5ffa"
 
 [[package]]
+name = "wdgetlib"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "lazy_static",
+ "num_cpus",
+ "regex",
+ "reqwest",
+ "scopeguard",
+ "serde 1.0.125",
+ "serde_json",
+ "sha-1",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2176,22 +2193,18 @@ dependencies = [
  "anyhow",
  "atty",
  "clap",
- "futures",
  "lazy_static",
  "memchr",
- "num_cpus",
  "quick-xml",
  "rayon",
  "regex",
  "reqwest",
- "scopeguard",
- "serde 1.0.125",
- "serde_json",
  "sha-1",
  "snmalloc-rs",
  "termcolor",
  "thiserror",
  "tokio",
+ "wdgetlib",
 ]
 
 [[package]]

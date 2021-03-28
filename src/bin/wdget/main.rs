@@ -4,7 +4,6 @@
 //
 // Distributed under the terms of the MIT license.
 
-mod lib;
 mod verify;
 
 use std::env::current_dir;
@@ -19,11 +18,11 @@ use tokio::time;
 use anyhow::{anyhow, bail, Result};
 use clap::{crate_authors, crate_version, App, AppSettings, Arg};
 use lazy_static::lazy_static;
-use lib::*;
 use regex::Regex;
 use reqwest::Client;
 use termcolor::ColorChoice;
 use tokio::{pin, select};
+use wdgetlib::*;
 
 fn create_client() -> Result<Client> {
     Ok(reqwest::Client::builder()
@@ -142,7 +141,7 @@ where
                 download_finished = true;
             }
             _ = tokio::signal::ctrl_c() => {
-                return Err(anyhow::Error::from(lib::Error::AbortedByUser()));
+                return Err(anyhow::Error::from(wdgetlib::Error::AbortedByUser()));
             }
             download_progress = progress_receive.recv(), if !progress_reporting_finished => {
                 match download_progress {

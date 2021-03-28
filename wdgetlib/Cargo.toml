@@ -1,0 +1,21 @@
+[package]
+name = "wdgetlib"
+version = "0.0.1"
+authors = ["Count Count <countvoncount123456@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+regex = "1"
+thiserror = "1.0.20"
+reqwest = "0.11"
+tokio = { version = "1.0", features = ["macros", "process"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+sha-1 = "0.9.1"
+lazy_static = "1.4"
+futures = "0.3.13"
+scopeguard = "1.1.0"
+num_cpus = "1.13.0"
+
