@@ -58,17 +58,17 @@ async fn list_dates(client: &Client, wiki: &str) -> Result<()> {
 async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
     let dump_status = get_dump_status(client, wiki, date).await?;
     let mut tw = TabWriter::new(stdout());
-    writeln!(tw, "Dump\tStatus\t#Files\tSize").unwrap();
+    writeln!(tw, "Dump\tStatus\tNo. of files\tCompressed size").unwrap();
     for (job_name, job_info) in &dump_status.jobs {
         if let Some(files) = &job_info.files {
             let sum = files.values().map(|info| info.size.unwrap_or(0)).sum::<u64>();
             writeln!(
                 tw,
-                "{}\t{}\t{:2} files\t{:.2} MiB",
+                "{}\t{}\t{:3} file(s)\t{}",
                 &job_name,
                 &job_info.status,
                 files.len(),
-                sum as f64 / 1024.0 / 1024.0
+                get_human_size(sum)
             )
             .unwrap();
         } else {
@@ -77,6 +77,21 @@ async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
     }
     tw.flush().unwrap();
     Ok(())
+}
+
+fn get_human_size(byte_len: u64) -> String {
+    let mut len = byte_len as f64;
+    let units = ["KiB", "MiB", "GiB", "TiB"];
+    if len < 1000.0 {
+        return std::format!("{:4.0} bytes", len);
+    }
+    for unit in units.iter() {
+        len /= 1024.0;
+        if len < 1000.0 {
+            return std::format!("{:6.2} {}", len, unit);
+        }
+    }
+    std::format!("{:6.2} PiB", len)
 }
 
 fn check_date_valid(date_spec: &str) -> Result<()> {
