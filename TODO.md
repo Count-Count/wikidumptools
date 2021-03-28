@@ -11,7 +11,6 @@
 - new options --bunzip2-binary, --bunzip2-options
 - gz, 7z decompression support
 - arg checking (disallow empty as well?)
-- no stdio output wdget lib
 - support updating from incr(emental) dumps
 
 ### wdgrep
