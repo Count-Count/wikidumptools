@@ -5,6 +5,7 @@
 // Distributed under the terms of the MIT license.
 
 mod lib;
+mod verify;
 
 use std::env::current_dir;
 use std::io::Write;
@@ -412,7 +413,7 @@ async fn run() -> Result<()> {
             if !dump_files_dir.is_dir() {
                 bail!("Dump files directory does not exist or is not accessible.")
             };
-            verify_downloaded_dump(&client, wiki, date_spec, dump_type, dump_files_dir).await?
+            verify::verify_downloaded_dump(&client, wiki, date_spec, dump_type, dump_files_dir).await?
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }
