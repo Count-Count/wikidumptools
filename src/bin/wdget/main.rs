@@ -64,7 +64,7 @@ async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
             let sum = files.values().map(|info| info.size.unwrap_or(0)).sum::<u64>();
             writeln!(
                 tw,
-                "{}\t{}\t{} files\t{:.2} MiB",
+                "{}\t{}\t{:2} files\t{:.2} MiB",
                 &job_name,
                 &job_info.status,
                 files.len(),
