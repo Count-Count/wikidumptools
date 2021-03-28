@@ -14,7 +14,9 @@ use std::process::Stdio;
 use std::time::Instant;
 
 use fs::remove_file;
-use futures::stream::{self, StreamExt};
+use futures::executor::ThreadPool;
+use futures::stream::{self, FuturesUnordered, StreamExt};
+use futures::task::SpawnExt;
 use futures::TryFutureExt;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -182,15 +184,21 @@ fn get_file_in_dir(directory: &Path, file_name: &str) -> PathBuf {
     file
 }
 
-fn verify_existing_file(file_path: &Path, file_name: &str, file_data: &DumpFileInfo, verbose: bool) -> Result<()> {
+fn verify_existing_file(
+    file_path: &Path,
+    file_name: &str,
+    expected_file_size: Option<u64>,
+    expected_sha1: Option<String>,
+    verbose: bool,
+) -> Result<()> {
     let file_metadata = fs::metadata(file_path).map_err(|e| {
         Error::DumpFileAccessError(
             file_path.to_owned(),
             std::format!("Could not get file information: {0}", e),
         )
     })?;
-    if let Some(expected_file_size) = &file_data.size {
-        if *expected_file_size != file_metadata.len() {
+    if let Some(expected_file_size) = expected_file_size {
+        if expected_file_size != file_metadata.len() {
             return Err(Error::DumpFileAccessError(
                 file_path.to_owned(),
                 std::format!(
@@ -201,7 +209,7 @@ fn verify_existing_file(file_path: &Path, file_name: &str, file_data: &DumpFileI
             ));
         }
     }
-    match file_data.sha1.as_ref() {
+    match expected_sha1.as_ref() {
         Some(expected_sha1) => {
             let mut file = fs::File::open(file_path).map_err(|e| {
                 Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {}", e))
@@ -255,6 +263,7 @@ pub async fn verify_downloaded_dump<T>(
 where
     T: AsRef<Path> + Send,
 {
+    let thread_pool = ThreadPool::new().expect("Could not create temporary threadpool");
     let dump_files_directory = dump_files_directory.as_ref();
     if !dump_files_directory.exists() {
         return Err(Error::TargetDirectoryDoesNotExist(dump_files_directory.to_owned()));
@@ -265,9 +274,10 @@ where
         return Err(Error::DumpNotComplete());
     }
     let files = job_info.files.as_ref().ok_or(Error::DumpHasNoFiles())?;
+    let mut futures = FuturesUnordered::new();
     for (file_name, file_data) in files {
-        let target_file_name = get_target_file_name(file_name, false);
-        let target_file_path = get_file_in_dir(dump_files_directory, target_file_name);
+        let target_file_name = get_target_file_name(file_name, false).to_owned();
+        let target_file_path = get_file_in_dir(dump_files_directory, target_file_name.as_str());
         if !target_file_path.exists() {
             let decompressed_target_file_name = get_target_file_name(file_name, true);
             let decompressed_target_file_path = get_file_in_dir(dump_files_directory, decompressed_target_file_name);
@@ -276,10 +286,27 @@ where
                     decompressed_target_file_name.to_owned(),
                 ));
             } else {
-                return Err(Error::FileToBeVerifiedNotFound(target_file_name.to_owned()));
+                return Err(Error::FileToBeVerifiedNotFound(target_file_name));
             }
         }
-        verify_existing_file(&target_file_path, target_file_name, file_data, true)?;
+        let expected_file_size = file_data.size;
+        let expected_sha1 = file_data.sha1.clone();
+        futures.push(
+            thread_pool
+                .spawn_with_handle(async move {
+                    verify_existing_file(
+                        &target_file_path,
+                        target_file_name.as_str(),
+                        expected_file_size,
+                        expected_sha1,
+                        true,
+                    )
+                })
+                .expect("Could not spawn future on threadpool"),
+        );
+    }
+    while let Some(res) = futures.next().await {
+        res?;
     }
     Ok(())
 }
