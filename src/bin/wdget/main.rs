@@ -64,7 +64,7 @@ async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
             let sum = files.values().map(|info| info.size.unwrap_or(0)).sum::<u64>();
             writeln!(
                 tw,
-                "{}\t{}\t{:3} file(s)\t{}",
+                "{}\t{}\t{:3} file(s)\t{:>10}",
                 &job_name,
                 &job_info.status,
                 files.len(),
@@ -81,14 +81,14 @@ async fn list_types(client: &Client, wiki: &str, date: &str) -> Result<()> {
 
 fn get_human_size(byte_len: u64) -> String {
     let mut len = byte_len as f64;
-    let units = ["KiB", "MiB", "GiB", "TiB"];
+    let units = ["KiB", "MiB", "GiB", "TiB", "PiB"];
     if len < 1000.0 {
-        return std::format!("{:4.0} bytes", len);
+        return std::format!("{:.0} bytes", len);
     }
     for unit in units.iter() {
         len /= 1024.0;
         if len < 1000.0 {
-            return std::format!("{:6.2} {}", len, unit);
+            return std::format!("{:.2} {}", len, unit);
         }
     }
     std::format!("{:6.2} PiB", len)
@@ -205,26 +205,25 @@ where
                 if show_progress {
                     let speed =
                     if bytes_received - prev_bytes_received != 0  {
-                        let mib_per_sec = (bytes_received - prev_bytes_received) as f64 / 1024.0 / 1024.0 / prev_time.elapsed().as_secs_f64();
-                        std::format!("({:.2} MiB/s)", mib_per_sec)
+                        let bytes_per_sec = (bytes_received - prev_bytes_received) as f64 / prev_time.elapsed().as_secs_f64();
+                        std::format!("({}/s)", get_human_size(bytes_per_sec as u64))
                     } else {
                         std::format!("(stalled)")
                     };
                     let mut progress_string =
                         if let Some(total_data_size) = total_data_size {
-                            let total_mib = total_data_size as f64 / 1024.0 / 1024.0;
                             std::format!(
-                                "\rDownloading {}- {:.2} MiB ({} %) of {:.2} MiB downloaded {}.",
+                                "\rDownloading {}- {} ({} %) of {} downloaded {}.",
                                 if download_options.decompress {"and decompressing "} else {""},
-                                bytes_received as f64 / 1024.0 / 1024.0,
+                                get_human_size(bytes_received),
                                 bytes_received * 100 / total_data_size,
-                                total_mib,
+                                get_human_size(total_data_size),
                                 speed)
                         } else {
                             std::format!(
-                                "\rDownloading {}- {:.2} MiB downloaded {}.",
+                                "\rDownloading {}- {} downloaded {}.",
                                 if download_options.decompress {"and decompressing "} else {""},
-                                bytes_received as f64 / 1024.0 / 1024.0,
+                                get_human_size(bytes_received),
                                 speed)
                         };
                     let new_printed_progress_len = progress_string.chars().count();
