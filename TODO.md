@@ -7,13 +7,13 @@
 
 ### wdget:
 - color?
-- bunzip2 via lib?
 - new options --bunzip2-binary, --bunzip2-options
 - gz, 7z decompression support
 - arg checking (disallow empty as well?)
 - support updating from incr(emental) dumps
 
 ### wdgrep
+- bunzip2 support via lib
 - ci, more tests, coverage
 - set up benchmarking
 - README.md
@@ -59,11 +59,8 @@
 
 ## wdget
 - progress: show ETA?
-- list-dumps: also show #files, total size, description as table
-- show list-wikis as table with tabwriter crate
-- only show progress with tty
 - download --verify or --no-verify option?
-- colorize (+clap colorize)
+- colorize
 - support decompressing  .gz/.xz while dl'ing as well?
 - --overwrite (or --force ?)
 - tests?
