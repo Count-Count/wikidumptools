@@ -140,7 +140,7 @@ where
         dump_type,
         target_directory,
         download_options,
-        progress_send,
+        Some(progress_send),
     );
     pin!(download_fut);
 

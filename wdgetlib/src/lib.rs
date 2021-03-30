@@ -234,7 +234,7 @@ async fn download_file(
     client: &Client,
     decompress: bool,
     verify_file_data: Option<&DumpFileInfo>,
-    progress_send: UnboundedSender<DownloadProgress>,
+    progress_send: Option<UnboundedSender<DownloadProgress>>,
 ) -> Result<()> {
     use DownloadProgress::*;
 
@@ -255,7 +255,9 @@ async fn download_file(
     defer! {
         if partfile_path.is_file() {
             if let Err(err) = remove_file(&partfile_path) {
-                progress_send_clone.send(CouldNotRemoveTempFile(partfile_path.clone(), partfile_path.file_name().unwrap().to_string_lossy().to_string(), err)).ok();
+                if let Some(progress_send_clone) = progress_send_clone {
+                    progress_send_clone.send(CouldNotRemoveTempFile(partfile_path.clone(), partfile_path.file_name().unwrap().to_string_lossy().to_string(), err)).ok();
+                }
             }
         }
     }
@@ -279,7 +281,9 @@ async fn download_file(
                         // decompressor has gone away unexpectedly - error handled there
                         return Ok(());
                     }
-                    progress_send.send(BytesReadFromNet(len))?;
+                    if let Some(ref progress_send) = progress_send {
+                        progress_send.send(BytesReadFromNet(len))?;
+                    }
                 }
                 verify_hash(expected_sha1, hasher, file_path.as_ref())?;
                 Result::Ok(())
@@ -298,7 +302,9 @@ async fn download_file(
                     partfile.write_all(write_buf).map_err(|e| {
                         Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
                     })?;
-                    progress_send.send(DecompressedBytesWrittenToDisk(read_len as u64))?;
+                    if let Some(ref progress_send) = progress_send {
+                        progress_send.send(DecompressedBytesWrittenToDisk(read_len as u64))?;
+                    }
                 } else {
                     break;
                 }
@@ -318,7 +324,9 @@ async fn download_file(
             partfile.write_all(chunk.as_ref()).map_err(|e| {
                 Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
             })?;
-            progress_send.send(BytesReadFromNet(chunk.len() as u64))?;
+            if let Some(ref progress_send) = progress_send {
+                progress_send.send(BytesReadFromNet(chunk.len() as u64))?;
+            }
         }
         verify_hash(expected_sha1, hasher, file_path.as_ref())?;
     }
@@ -356,7 +364,7 @@ pub async fn download_dump<T>(
     dump_type: &str,
     target_directory: T,
     download_options: &DownloadOptions<'_>,
-    progress_send: UnboundedSender<DownloadProgress>,
+    progress_send: Option<UnboundedSender<DownloadProgress>>,
 ) -> Result<()>
 where
     T: AsRef<Path> + Send,
@@ -380,10 +388,12 @@ where
         let target_file_name = get_target_file_name(file_name, download_options.decompress).to_owned();
         let target_file_path = get_file_in_dir(target_directory, target_file_name.as_str());
         if target_file_path.exists() {
-            progress_send.send(DownloadProgress::ExistingFileIgnored(
-                target_file_path,
-                target_file_name,
-            ))?;
+            if let Some(ref progress_send) = progress_send {
+                progress_send.send(DownloadProgress::ExistingFileIgnored(
+                    target_file_path,
+                    target_file_name,
+                ))?;
+            }
             continue;
         }
         let part_file_path = get_file_in_dir(target_directory, (target_file_name.to_owned() + ".part").as_str());
@@ -411,7 +421,9 @@ where
         futures.push(download_res);
     }
     if let Some(total_data_size) = total_data_size {
-        progress_send.send(DownloadProgress::TotalDownloadSize(total_data_size))?;
+        if let Some(ref progress_send) = progress_send {
+            progress_send.send(DownloadProgress::TotalDownloadSize(total_data_size))?;
+        }
     }
 
     // download missing files
@@ -434,7 +446,9 @@ where
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
     while let Some(res) = buffered.next().await {
         let (finished_file_name, finished_file_path) = res?;
-        progress_send.send(DownloadProgress::FileFinished(finished_file_path, finished_file_name))?;
+        if let Some(ref progress_send) = progress_send {
+            progress_send.send(DownloadProgress::FileFinished(finished_file_path, finished_file_name))?;
+        }
     }
 
     Ok(())
