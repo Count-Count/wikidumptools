@@ -4,14 +4,16 @@
 //
 // Distributed under the terms of the MIT license.
 
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
+use bytes::Bytes;
+use bzip2::read::MultiBzDecoder;
 use fs::remove_file;
 use futures::stream::{self, StreamExt};
 use futures::TryFutureExt;
@@ -21,9 +23,8 @@ use reqwest::{Client, StatusCode};
 use scopeguard::defer;
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::process::Command;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::task::{spawn_blocking, JoinError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -33,6 +34,8 @@ pub enum Error {
     JsonError(#[from] serde_json::Error),
     #[error("Error running decompression process: {0}")]
     DecompressorError(std::io::Error),
+    #[error("Error running decompression process: {0}")]
+    DecompressorJoinError(JoinError),
     #[error("Received invalid JSON data from Wikidata")]
     InvalidJsonFromWikidata(),
     #[error("Dump of this type was not found")]
@@ -195,6 +198,35 @@ fn verify_hash(expected_sha1: Option<&String>, hasher: Sha1, file_path: &Path) -
     Ok(())
 }
 
+struct BytesChannelRead {
+    current_bytes: Bytes,
+    receiver: tokio::sync::mpsc::Receiver<Bytes>,
+}
+impl BytesChannelRead {
+    fn from(receiver: tokio::sync::mpsc::Receiver<Bytes>) -> BytesChannelRead {
+        BytesChannelRead {
+            current_bytes: Bytes::new(),
+            receiver,
+        }
+    }
+}
+impl Read for BytesChannelRead {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        while self.current_bytes.is_empty() {
+            match self.receiver.blocking_recv() {
+                None => {
+                    return std::io::Result::Ok(0);
+                }
+                Some(bytes) => self.current_bytes = bytes,
+            }
+        }
+        let len = min(self.current_bytes.len(), buf.len());
+        buf[..len].copy_from_slice(&self.current_bytes[..len]);
+        self.current_bytes = self.current_bytes.slice(len..);
+        std::io::Result::Ok(len)
+    }
+}
+
 async fn download_file(
     url: String,
     file_path: PathBuf,
@@ -231,15 +263,8 @@ async fn download_file(
     let expected_sha1 = verify_file_data.and_then(|info| info.sha1.as_ref());
 
     if decompress {
-        let mut decompressor = Command::new("bunzip2")
-            .kill_on_drop(true)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(Error::DecompressorError)?;
+        let (decompress_send, decompress_receive) = mpsc::channel(1);
 
-        let mut decompressor_in = decompressor.stdin.take().expect("Subprocess stdin should not be None");
         let file_path = file_path.clone(); // clone since captured
         let copy_net_to_decompressor_in = {
             let progress_send = progress_send.clone();
@@ -249,66 +274,41 @@ async fn download_file(
                     if expected_sha1.is_some() {
                         hasher.update(chunk.as_ref());
                     }
-                    decompressor_in
-                        .write_all(chunk.as_ref())
-                        .await
-                        .map_err(Error::DecompressorError)?;
-                    progress_send.send(BytesReadFromNet(chunk.len() as u64))?;
+                    let len = chunk.len() as u64;
+                    if decompress_send.send(chunk).await.is_err() {
+                        // decompressor has gone away unexpectedly - error handled there
+                        return Ok(());
+                    }
+                    progress_send.send(BytesReadFromNet(len))?;
                 }
                 verify_hash(expected_sha1, hasher, file_path.as_ref())?;
-                decompressor_in.shutdown().await.map_err(Error::DecompressorError)
+                Result::Ok(())
             }
         };
 
-        let mut decompressor_out = decompressor
-            .stdout
-            .take()
-            .expect("Subprocess stdout should not be None");
         let partfile_path = partfile_path.clone(); // clone since captured
-        let copy_decompressor_out_to_file = async move {
-            let mut buf = Vec::with_capacity(65536);
+        let decompression = spawn_blocking(move || {
+            let compressed_read = BytesChannelRead::from(decompress_receive);
+            let mut decompressor = MultiBzDecoder::new(compressed_read);
+            let mut buf = [0; 65536];
             loop {
-                let read_len = decompressor_out
-                    .read_buf(&mut buf)
-                    .await
-                    .map_err(Error::DecompressorError)?;
+                let read_len = decompressor.read(&mut buf).map_err(Error::DecompressorError)?;
                 if read_len > 0 {
-                    partfile.write_all(buf.as_ref()).map_err(|e| {
+                    let write_buf = &buf[..read_len];
+                    partfile.write_all(write_buf).map_err(|e| {
                         Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
                     })?;
-                    buf.clear();
                     progress_send.send(DecompressedBytesWrittenToDisk(read_len as u64))?;
                 } else {
                     break;
                 }
             }
             Result::Ok(())
-        };
+        })
+        .map_err(Error::DecompressorJoinError);
 
-        let wait_for_decompressor_exit = async move {
-            let output = decompressor
-                .wait_with_output()
-                .await
-                .map_err(Error::DecompressorError)?;
-            if output.status.success() {
-                Ok(())
-            } else {
-                Err(Error::DecompressorError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Decompressor exited with status {} - stderr: {}",
-                        output.status,
-                        String::from_utf8_lossy(output.stderr.as_ref())
-                    ),
-                )))
-            }
-        };
-
-        tokio::try_join!(
-            copy_net_to_decompressor_in,
-            copy_decompressor_out_to_file,
-            wait_for_decompressor_exit
-        )?;
+        let (_, decompression_joined) = tokio::try_join!(copy_net_to_decompressor_in, decompression)?;
+        decompression_joined?;
     } else {
         let mut hasher = Sha1::new();
         while let Some(chunk) = r.chunk().await? {
