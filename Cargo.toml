@@ -12,6 +12,7 @@ name = "wikidumptools"
 version = "0.0.1"
 authors = ["Count Count <countvoncount123456@gmail.com>"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 wdgetlib = { version = "0.0.1", path = "wdgetlib/" }
