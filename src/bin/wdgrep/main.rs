@@ -21,6 +21,7 @@ static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
     stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
     writeln!(stderr, "{}", msg).unwrap();
+    stderr.reset().unwrap();
     process::exit(1);
 }
 fn main() {
