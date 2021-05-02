@@ -30,6 +30,7 @@ tokio = { version = "1.0", features = ["rt", "macros", "time", "signal", "proces
 sha-1 = "0.9.1"
 lazy_static = "1.4"
 tabwriter = "1.2.1"
+simdutf8 = "0.1.1"
 
 [dependencies.snmalloc-rs]
 version = "0.2.24"

@@ -18,6 +18,7 @@ use quick_xml::Reader;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 use regex::{Regex, RegexBuilder};
+use simdutf8::basic::{from_utf8, Utf8Error};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 macro_rules! buffer_write {
@@ -32,18 +33,14 @@ macro_rules! buffer_writeln {
     )
 }
 
-#[inline(always)]
-fn from_utf8(v: &[u8]) -> Result<&str> {
-    std::str::from_utf8(v).map_err(Error::Utf8)
-    // unsafe { Ok(std::str::from_utf8_unchecked(v)) }
-}
-
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("I/O error {0}")]
     Io(#[from] std::io::Error),
     #[error("UTF8 format error: {0}")]
-    Utf8(#[from] std::str::Utf8Error),
+    StdUtf8(#[from] std::str::Utf8Error),
+    #[error("XML format error: {0}")]
+    Utf8(#[from] Utf8Error),
     #[error("XML format error: {0}")]
     Xml(quick_xml::Error),
     #[error("Regex error: {0}")]
@@ -69,7 +66,7 @@ impl From<quick_xml::Error> for Error {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
         match error {
-            quick_xml::Error::Utf8(e) => Self::Utf8(e),
+            quick_xml::Error::Utf8(e) => Self::StdUtf8(e),
             quick_xml::Error::Io(e) => Self::Io(e),
             error => Self::Xml(error),
         }
