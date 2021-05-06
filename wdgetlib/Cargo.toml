@@ -14,7 +14,7 @@ reqwest = "0.11"
 tokio = { version = "1.0", features = ["macros", "process"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-sha-1 = "0.9.1"
+sha-1 = "0.9.5"
 lazy_static = "1.4"
 futures = "0.3.13"
 scopeguard = "1.1.0"
