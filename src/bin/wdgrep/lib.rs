@@ -17,8 +17,8 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use regex::{Regex, RegexBuilder};
-use simdutf8::basic::{from_utf8, Utf8Error};
+use regex::bytes::{Regex, RegexBuilder};
+use simdutf8::basic::from_utf8;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 macro_rules! buffer_write {
@@ -40,7 +40,7 @@ pub enum Error {
     #[error("UTF8 format error: {0}")]
     StdUtf8(#[from] std::str::Utf8Error),
     #[error("XML format error: {0}")]
-    Utf8(#[from] Utf8Error),
+    Utf8(#[from] simdutf8::basic::Utf8Error),
     #[error("XML format error: {0}")]
     Xml(quick_xml::Error),
     #[error("Regex error: {0}")]
@@ -76,7 +76,7 @@ impl From<quick_xml::Error> for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[inline(always)]
-fn read_text_and_then<T: BufRead, ResT, F>(
+fn read_str_and_then<T: BufRead, ResT, F>(
     reader: &mut Reader<T>,
     buf: &mut Vec<u8>,
     tag: &str,
@@ -89,6 +89,24 @@ where
         let unescaped_text = escaped_text.unescaped()?;
         let text = from_utf8(&unescaped_text)?;
         f(text)
+    } else {
+        Err(Error::OnlyTextExpectedInTag(tag.to_owned()))
+    }
+}
+
+#[inline(always)]
+fn read_bytes_and_then<T: BufRead, ResT, F>(
+    reader: &mut Reader<T>,
+    buf: &mut Vec<u8>,
+    tag: &str,
+    mut f: F,
+) -> Result<ResT>
+where
+    F: FnMut(&[u8]) -> Result<ResT>,
+{
+    if let Event::Text(escaped_text) = reader.read_event(buf)? {
+        let unescaped_text = escaped_text.unescaped()?;
+        f(&unescaped_text)
     } else {
         Err(Error::OnlyTextExpectedInTag(tag.to_owned()))
     }
@@ -409,7 +427,7 @@ fn search_dump_reader<B: BufRead>(
             match reader.read_event(&mut buf)? {
                 Event::Start(ref e) => match e.name() {
                     b"title" => {
-                        read_text_and_then(&mut reader, &mut buf, "title", |text| {
+                        read_str_and_then(&mut reader, &mut buf, "title", |text| {
                             title.clear();
                             title.push_str(text);
                             Ok(())
@@ -417,7 +435,7 @@ fn search_dump_reader<B: BufRead>(
                     }
                     b"ns" => {
                         if let Some(restrict_namespaces) = restrict_namespaces {
-                            let skip = read_text_and_then(&mut reader, &mut buf, "ns", |text| {
+                            let skip = read_str_and_then(&mut reader, &mut buf, "ns", |text| {
                                 Ok(!restrict_namespaces.iter().any(|i| *i == text))
                             })?;
                             if skip {
@@ -427,7 +445,7 @@ fn search_dump_reader<B: BufRead>(
                     }
                     b"revision" => {
                         skip_to_start_tag(&mut reader, &mut buf, b"id")?;
-                        read_text_and_then(&mut reader, &mut buf, "id", |text| {
+                        read_str_and_then(&mut reader, &mut buf, "id", |text| {
                             revision_id.clear();
                             revision_id.push_str(text);
                             Ok(())
@@ -435,7 +453,7 @@ fn search_dump_reader<B: BufRead>(
                         if let SkipToStartTagOrEmptyTagResult::StartTagFound =
                             skip_to_start_tag_or_empty_tag(&mut reader, &mut buf, b"text")?
                         {
-                            read_text_and_then(&mut reader, &mut buf, "text", |text| {
+                            read_bytes_and_then(&mut reader, &mut buf, "text", |text| {
                                 if only_print_title_and_revision {
                                     if re.is_match(text) {
                                         set_color(&mut stdout_buffer, Color::Cyan);
@@ -449,7 +467,7 @@ fn search_dump_reader<B: BufRead>(
                                         stdout_buffer.clear();
                                     }
                                 } else {
-                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, re);
+                                    find_in_text(&mut stdout_buffer, title.as_str(), revision_id.as_str(), text, re)?;
                                     stdout_writer.print(&stdout_buffer).unwrap();
                                     stdout_buffer.clear();
                                 }
@@ -472,7 +490,7 @@ fn search_dump_reader<B: BufRead>(
 }
 
 #[inline(always)]
-fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str, re: &Regex) {
+fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &[u8], re: &Regex) -> Result<()> {
     let mut last_match_end: usize = 0;
     let mut first_match = true;
     for m in re.find_iter(text) {
@@ -487,41 +505,41 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
             set_plain(buffer);
         }
 
-        match memrchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
+        match memrchr(b'\n', &text[last_match_end..m.start()]) {
             None => {
                 // match starting on same line that the last match ended
 
                 // print text between matches
-                buffer_write!(buffer, "{}", &text[last_match_end..m.start()]);
+                buffer_write!(buffer, "{}", from_utf8(&text[last_match_end..m.start()])?);
             }
             Some(pos) => {
                 // match starting on a new line
 
                 // finish line from previous match
                 if !first_match {
-                    match memchr(b'\n', &text.as_bytes()[last_match_end..m.start()]) {
+                    match memchr(b'\n', &text[last_match_end..m.start()]) {
                         None => {
                             panic!("Memchr/Memrchr inconsistency");
                         }
                         Some(pos) => {
-                            buffer_writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]);
+                            buffer_writeln!(buffer, "{}", from_utf8(&text[last_match_end..last_match_end + pos])?);
                         }
                     }
                 }
                 // print text in line preceding match
-                buffer_write!(buffer, "{}", &text[last_match_end + pos + 1..m.start()]);
+                buffer_write!(buffer, "{}", from_utf8(&text[last_match_end + pos + 1..m.start()])?);
             }
         };
         // print matched text
 
         // don't print extra newline and the following line if match end with \n
-        let actual_match_end = if m.start() < m.end() && text.as_bytes()[m.end() - 1] == b'\n' {
+        let actual_match_end = if m.start() < m.end() && text[m.end() - 1] == b'\n' {
             m.end() - 1
         } else {
             m.end()
         };
         set_color(buffer, Color::Red);
-        buffer_write!(buffer, "{}", &text[m.start()..actual_match_end]);
+        buffer_write!(buffer, "{}", from_utf8(&text[m.start()..actual_match_end])?);
         set_plain(buffer);
         last_match_end = actual_match_end;
         if first_match {
@@ -531,17 +549,18 @@ fn find_in_text(buffer: &mut Buffer, title: &str, revision_id: &str, text: &str,
     let matches_found = !first_match;
     if matches_found {
         // print rest of last matching line
-        match memchr(b'\n', &text.as_bytes()[last_match_end..]) {
+        match memchr(b'\n', &text[last_match_end..]) {
             None => {
-                buffer_writeln!(buffer, "{}", &text[last_match_end..]);
+                buffer_writeln!(buffer, "{}", from_utf8(&text[last_match_end..])?);
             }
             Some(pos) => {
-                buffer_writeln!(buffer, "{}", &text[last_match_end..last_match_end + pos]);
+                buffer_writeln!(buffer, "{}", from_utf8(&text[last_match_end..last_match_end + pos])?);
             }
         }
         // separate from next match
         writeln!(buffer).unwrap();
     }
+    Ok(())
 }
 
 pub fn get_dump_files(dump_file_or_prefix: &str) -> Result<(Vec<String>, u64)> {
@@ -626,9 +645,10 @@ mod tests {
             &mut stdout_buffer,
             "title",
             "revision_id",
-            text,
+            text.as_bytes(),
             &RegexBuilder::new(pattern).build().unwrap(),
-        );
+        )
+        .unwrap();
         // stdout_writer.print(&stdout_buffer).unwrap();
         std::str::from_utf8(stdout_buffer.as_slice())
             .expect("Output is not UTF-8")
