@@ -16,7 +16,7 @@ use lib::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 #[global_allocator]
-static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
     stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
