@@ -12,17 +12,16 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::Instant;
-use tabwriter::TabWriter;
-use tokio::sync::mpsc::unbounded_channel;
-use tokio::time;
 
 use anyhow::{anyhow, bail, Result};
 use clap::{crate_authors, crate_version, App, AppSettings, Arg};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
+use tabwriter::TabWriter;
 use termcolor::ColorChoice;
-use tokio::{pin, select};
+use tokio::sync::mpsc::unbounded_channel;
+use tokio::{pin, select, time};
 use wdgetlib::*;
 
 fn create_client() -> Result<Client> {

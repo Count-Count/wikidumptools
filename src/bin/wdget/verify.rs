@@ -11,9 +11,7 @@ use std::time::Instant;
 
 use reqwest::Client;
 use sha1::{Digest, Sha1};
-
-use wdgetlib::Error;
-use wdgetlib::{get_dump_status, DumpFileInfo};
+use wdgetlib::{get_dump_status, DumpFileInfo, Error};
 
 type Result<T> = std::result::Result<T, Error>;
 
