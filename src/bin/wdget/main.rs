@@ -306,7 +306,7 @@ async fn run() -> Result<()> {
                     Arg::new("mirror")
                         .short('m')
                         .long("mirror")
-                        .about("Mirror root URL or one of the shortcuts 'acc.umu.se' and 'your.org'")
+                        .about("Mirror root URL or one of the shortcuts 'acc.umu.se', 'your.org' and 'bringyour.com'")
                         .takes_value(true),
                 )
                 .arg(
@@ -388,6 +388,7 @@ async fn run() -> Result<()> {
             let mirror = match subcommand_matches.value_of("mirror") {
                 Some("acc.umu.se") => Some("https://ftp.acc.umu.se/mirror/wikimedia.org/dumps"),
                 Some("your.org") => Some("http://dumps.wikimedia.your.org/"),
+                Some("bringyour.com") => Some("https://wikimedia.bringyour.com/"),
                 Some(url) => Some(url),
                 None => None,
             };
