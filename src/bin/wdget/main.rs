@@ -273,7 +273,7 @@ async fn run() -> Result<()> {
         .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
         .setting(AppSettings::StrictUtf8)
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::VersionlessSubcommands)
+        .setting(AppSettings::DisableVersionForSubcommands)
         .setting(AppSettings::DeriveDisplayOrder)
         .setting(AppSettings::ColoredHelp)
         .subcommand(
