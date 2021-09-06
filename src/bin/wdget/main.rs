@@ -421,7 +421,7 @@ async fn run() -> Result<()> {
                 show_progress,
                 show_warnings,
             )
-            .await?
+            .await?;
         }
         "verify" => {
             let subcommand_matches = matches.subcommand_matches("verify").unwrap();
