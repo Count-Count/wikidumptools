@@ -41,13 +41,13 @@ where
         if !target_file_path.exists() {
             let decompressed_target_file_name = get_target_file_name(file_name, true);
             let decompressed_target_file_path = get_file_in_dir(dump_files_directory, decompressed_target_file_name);
-            if decompressed_target_file_path.exists() {
-                return Err(Error::DecompressedFileCannotBeVerified(
+            return if decompressed_target_file_path.exists() {
+                Err(Error::DecompressedFileCannotBeVerified(
                     decompressed_target_file_name.to_owned(),
-                ));
+                ))
             } else {
-                return Err(Error::FileToBeVerifiedNotFound(target_file_name.to_owned()));
-            }
+                Err(Error::FileToBeVerifiedNotFound(target_file_name.to_owned()))
+            };
         }
         verify_existing_file(&target_file_path, target_file_name, file_data, true)?;
     }
