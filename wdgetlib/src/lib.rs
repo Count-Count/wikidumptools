@@ -3,9 +3,9 @@
 // (C) 2020 Count Count
 //
 // Distributed under the terms of the MIT license.
-
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -147,8 +147,8 @@ pub async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<
 pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: Option<&str>) -> Result<String> {
     let mut available_dates = get_available_dates(client, wiki).await?;
     available_dates.reverse();
-    for date in &available_dates {
-        let res = get_dump_status(client, wiki, date).await;
+    for date in available_dates {
+        let res = get_dump_status(client, wiki, &date).await;
         match res {
             Ok(dump_status) => {
                 if let Some(dump_type) = dump_type {
@@ -157,17 +157,17 @@ pub async fn get_latest_available_date(client: &Client, wiki: &str, dump_type: O
                         .get(dump_type)
                         .map_or(false, |job| job.status == "done")
                     {
-                        return Ok(date.to_owned());
+                        return Ok(date);
                     }
                 } else {
-                    return Ok(date.to_owned());
+                    return Ok(date);
                 }
             }
             Err(Error::DumpStatusFileNotFound()) => continue,
             Err(e) => return Err(e),
         }
     }
-    return Err(Error::NoDumpDatesFound());
+    Err(Error::NoDumpDatesFound())
 }
 
 fn get_target_file_name(file_name: &str, decompress: bool) -> &str {
@@ -203,8 +203,8 @@ struct BytesChannelRead {
     receiver: tokio::sync::mpsc::Receiver<Bytes>,
 }
 impl BytesChannelRead {
-    fn from(receiver: tokio::sync::mpsc::Receiver<Bytes>) -> BytesChannelRead {
-        BytesChannelRead {
+    fn from(receiver: tokio::sync::mpsc::Receiver<Bytes>) -> Self {
+        Self {
             current_bytes: Bytes::new(),
             receiver,
         }
@@ -236,8 +236,6 @@ async fn download_file(
     verify_file_data: Option<&DumpFileInfo>,
     progress_send: Option<UnboundedSender<DownloadProgress>>,
 ) -> Result<()> {
-    use DownloadProgress::*;
-
     let mut r = client.get(url).send().await?.error_for_status()?;
     let mut partfile = OpenOptions::new()
         .create(true)
@@ -246,7 +244,7 @@ async fn download_file(
         .open(&partfile_path)
         .map_err(|e| {
             Error::DumpFileAccessError(
-                partfile_path.to_owned(),
+                partfile_path.clone(),
                 std::format!("Could not create part file: {0}", e),
             )
         })?;
@@ -256,7 +254,17 @@ async fn download_file(
         if partfile_path.is_file() {
             if let Err(err) = remove_file(&partfile_path) {
                 if let Some(progress_send_clone) = progress_send_clone {
-                    progress_send_clone.send(CouldNotRemoveTempFile(partfile_path.clone(), partfile_path.file_name().unwrap().to_string_lossy().to_string(), err)).ok();
+                    progress_send_clone
+                        .send(DownloadProgress::CouldNotRemoveTempFile(
+                            partfile_path.clone(),
+                            partfile_path
+                                .file_name()
+                                .unwrap_or_else(|| OsStr::new("<unknown>"))
+                                .to_string_lossy()
+                                .to_string(),
+                            err,
+                        ))
+                        .ok();
                 }
             }
         }
@@ -282,7 +290,7 @@ async fn download_file(
                         return Ok(());
                     }
                     if let Some(ref progress_send) = progress_send {
-                        progress_send.send(BytesReadFromNet(len))?;
+                        progress_send.send(DownloadProgress::BytesReadFromNet(len))?;
                     }
                 }
                 verify_hash(expected_sha1, hasher, file_path.as_ref())?;
@@ -300,10 +308,10 @@ async fn download_file(
                 if read_len > 0 {
                     let write_buf = &buf[..read_len];
                     partfile.write_all(write_buf).map_err(|e| {
-                        Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
+                        Error::DumpFileAccessError(partfile_path.clone(), std::format!("Write error: {0}", e))
                     })?;
                     if let Some(ref progress_send) = progress_send {
-                        progress_send.send(DecompressedBytesWrittenToDisk(read_len as u64))?;
+                        progress_send.send(DownloadProgress::DecompressedBytesWrittenToDisk(read_len as u64))?;
                     }
                 } else {
                     break;
@@ -321,11 +329,11 @@ async fn download_file(
             if expected_sha1.is_some() {
                 hasher.update(chunk.as_ref());
             }
-            partfile.write_all(chunk.as_ref()).map_err(|e| {
-                Error::DumpFileAccessError(partfile_path.to_owned(), std::format!("Write error: {0}", e))
-            })?;
+            partfile
+                .write_all(chunk.as_ref())
+                .map_err(|e| Error::DumpFileAccessError(partfile_path.clone(), std::format!("Write error: {0}", e)))?;
             if let Some(ref progress_send) = progress_send {
-                progress_send.send(BytesReadFromNet(chunk.len() as u64))?;
+                progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
             }
         }
         verify_hash(expected_sha1, hasher, file_path.as_ref())?;
@@ -333,7 +341,7 @@ async fn download_file(
 
     std::fs::rename(&partfile_path, &file_path).map_err(|e| {
         Error::DumpFileAccessError(
-            partfile_path.to_owned(),
+            partfile_path.clone(),
             std::format!("Could not rename part file: {0}", e),
         )
     })?;
@@ -396,7 +404,7 @@ where
             }
             continue;
         }
-        let part_file_path = get_file_in_dir(target_directory, (target_file_name.to_owned() + ".part").as_str());
+        let part_file_path = get_file_in_dir(target_directory, (target_file_name.clone() + ".part").as_str());
         if let Some(ref mut len) = total_data_size {
             match file_data.size {
                 Some(cur_len) => {
@@ -411,7 +419,7 @@ where
         let download_res = download_file(
             url,
             target_file_path.clone(),
-            part_file_path.to_owned(),
+            part_file_path.clone(),
             client,
             download_options.decompress,
             Some(file_data),
@@ -441,7 +449,7 @@ where
                 1
             }
         },
-        |n| n.get(),
+        NonZeroUsize::get,
     );
     let mut buffered = stream_of_downloads.buffer_unordered(max_concurrent_downloads);
     while let Some(res) = buffered.next().await {
