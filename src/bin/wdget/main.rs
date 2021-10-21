@@ -84,7 +84,7 @@ fn get_human_size(byte_len: u64) -> String {
     if len < 1000.0 {
         return std::format!("{:.0} bytes", len);
     }
-    for unit in units.iter() {
+    for unit in units {
         len /= 1024.0;
         if len < 1000.0 {
             return std::format!("{:.2} {}", len, unit);
@@ -367,7 +367,7 @@ async fn run() -> Result<()> {
             let date_spec = subcommand_matches.value_of("dump date").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, None).await?;
             eprintln!("Listing dumps for {}, dump run from {}", wiki, date);
-            list_types(&client, wiki, &date).await?
+            list_types(&client, wiki, &date).await?;
         }
 
         "download" => {
@@ -421,7 +421,7 @@ async fn run() -> Result<()> {
                 show_progress,
                 show_warnings,
             )
-            .await?
+            .await?;
         }
         "verify" => {
             let subcommand_matches = matches.subcommand_matches("verify").unwrap();
@@ -436,7 +436,7 @@ async fn run() -> Result<()> {
             if !dump_files_dir.is_dir() {
                 bail!("Dump files directory does not exist or is not accessible.")
             };
-            verify::verify_downloaded_dump(&client, wiki, date_spec, dump_type, dump_files_dir).await?
+            verify::verify_downloaded_dump(&client, wiki, date_spec, dump_type, dump_files_dir).await?;
         }
         _ => unreachable!("Unknown subcommand, should be caught by arg matching."),
     }
