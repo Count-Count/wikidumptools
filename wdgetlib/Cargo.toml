@@ -16,7 +16,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 sha-1 = "0.9.1"
 lazy_static = "1.4"
-futures = "0.3.13"
+futures = "0.3.18"
 scopeguard = "1.1.0"
 num_cpus = "1.13.0"
 bzip2 = "0.4"
