@@ -11,7 +11,7 @@ use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
 
-use clap::{crate_authors, crate_version, App, AppSettings, Arg};
+use clap::{crate_authors, crate_version, App, Arg};
 use lib::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -29,12 +29,10 @@ fn main() {
         .version(crate_version!())
         .author(crate_authors!())
         .about("Search through Wikipedia and other Wikimedia wiki dumps using regular expressions.")
-        .setting(AppSettings::StrictUtf8)
-        .setting(AppSettings::ColoredHelp)
-        .arg(Arg::new("search term").about("regex search term").required(true))
+        .arg(Arg::new("search term").help("regex search term").required(true))
         .arg(
             Arg::new("dump file or prefix")
-                .about("The dump file or common prefix of muliple dump files to search")
+                .help("The dump file or common prefix of muliple dump files to search")
                 .required(true),
         )
         .arg(
@@ -42,19 +40,19 @@ fn main() {
                 .long("ns")
                 .takes_value(true)
                 .use_delimiter(true)
-                .about("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
+                .help("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
-                .about("Print performance statistics"),
+                .help("Print performance statistics"),
         )
         .arg(
             Arg::new("revisions-with-matches")
                 .short('l')
                 .long("revisions-with-matches")
-                .about("Only list title and revision of articles containing matching text"),
+                .help("Only list title and revision of articles containing matching text"),
         )
         .arg(
             Arg::new("threads")
@@ -62,7 +60,7 @@ fn main() {
                 .long("threads")
                 .takes_value(true)
                 .value_name("num")
-                .about("Number of parallel threads to use. The default is the number of logical cpus."),
+                .help("Number of parallel threads to use. The default is the number of logical cpus."),
         )
         .arg(
             Arg::new("color")
@@ -70,21 +68,21 @@ fn main() {
                 .takes_value(true)
                 .possible_values(&["always", "auto", "never"])
                 .value_name("mode")
-                .about("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
+                .help("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )
         .arg(
             Arg::new("7z-binary")
                 .long("7z-binary")
                 .takes_value(true)
                 .value_name("path")
-                .about("Binary for extracting text from .7z files, defaults to \"7z\"."),
+                .help("Binary for extracting text from .7z files, defaults to \"7z\"."),
         )
         .arg(
             Arg::new("7z-options")
                 .long("7z-options")
                 .takes_value(true)
                 .value_name("options")
-                .about(
+                .help(
                     "Options passed to 7z binary for extracting text from .7z files to stdout, defaults to \"e -so\".",
                 ),
         )
@@ -93,14 +91,14 @@ fn main() {
                 .long("bzcat-binary")
                 .takes_value(true)
                 .value_name("path")
-                .about("Binary for extracting text from .bz2 files to stdout, defaults to \"bzcat\"."),
+                .help("Binary for extracting text from .bz2 files to stdout, defaults to \"bzcat\"."),
         )
         .arg(
             Arg::new("bzcat-options")
                 .long("bzcat-options")
                 .takes_value(true)
                 .value_name("options")
-                .about("Options passed to bzcat binary for extracting text from .bz2 files, defaults to no options."),
+                .help("Options passed to bzcat binary for extracting text from .bz2 files, defaults to no options."),
         )
         .get_matches();
 

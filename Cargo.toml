@@ -16,7 +16,7 @@ license = "MIT"
 wdgetlib = { version = "0.0.1", path = "wdgetlib/" }
 quick-xml = "0.22.0"
 regex = "1"
-clap = "3.0.0-beta.2"
+clap = { version = "3.0.0-rc.0", features = ["cargo"] }
 memchr = "2.3.3"
 termcolor = "1.1.2"
 rayon = "1.5.1"
@@ -25,7 +25,7 @@ thiserror = "1.0.25"
 anyhow = "1.0"
 reqwest = "0.11"
 tokio = { version = "1.7", features = ["rt", "macros", "time", "signal", "process", "sync"] }
-sha-1 = "0.9.1"
+sha-1 = "0.10.0"
 lazy_static = "1.4"
 tabwriter = "1.2.1"
 simdutf8 = "0.1.1"

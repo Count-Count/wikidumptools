@@ -262,57 +262,54 @@ where
 }
 
 async fn run() -> Result<()> {
-    let wiki_name_arg = Arg::new("wiki name").about("Name of the wiki").required(true);
+    let wiki_name_arg = Arg::new("wiki name").help("Name of the wiki").required(true);
     let dump_date_arg = Arg::new("dump date")
-        .about("Date of the dump (YYYYMMDD or 'latest')")
+        .help("Date of the dump (YYYYMMDD or 'latest')")
         .required(true);
 
     let matches = App::new("WikiDumpGet")
         .version(crate_version!())
         .author(crate_authors!())
         .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
-        .setting(AppSettings::StrictUtf8)
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .setting(AppSettings::DisableVersionForSubcommands)
         .setting(AppSettings::DeriveDisplayOrder)
-        .setting(AppSettings::ColoredHelp)
         .subcommand(
             App::new("download")
                 .about("Download a wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
-                .arg(Arg::new("dump type").about("Type of the dump").required(true))
+                .arg(Arg::new("dump type").help("Type of the dump").required(true))
                 .arg(
                     Arg::new("quiet")
                         .short('q')
                         .long("quiet")
-                        .about("Don't print progress updates"),
+                        .help("Don't print progress updates"),
                 )
                 .arg(
                     Arg::new("decompress")
                         .short('d')
                         .long("decompress")
-                        .about("Decompress .bz2 files during download"),
+                        .help("Decompress .bz2 files during download"),
                 )
                 .arg(
                     Arg::new("target-dir")
                         .short('t')
                         .long("target-dir")
-                        .about("Target directory")
+                        .help("Target directory")
                         .takes_value(true),
                 )
                 .arg(
                     Arg::new("mirror")
                         .short('m')
                         .long("mirror")
-                        .about("Mirror root URL or one of the shortcuts 'acc.umu.se', 'your.org' and 'bringyour.com'")
+                        .help("Mirror root URL or one of the shortcuts 'acc.umu.se', 'your.org' and 'bringyour.com'")
                         .takes_value(true),
                 )
                 .arg(
                     Arg::new("concurrency")
                         .short('j')
                         .long("concurrency")
-                        .about("Number of parallel connections, defaults to 1 if no mirror, determined heuristically otherwise.")
+                        .help("Number of parallel connections, defaults to 1 if no mirror, determined heuristically otherwise.")
                         .takes_value(true),
                 ),
         )
@@ -321,12 +318,12 @@ async fn run() -> Result<()> {
                 .about("Verify an already downloaded wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
-                .arg(Arg::new("dump type").about("Type of the dump").required(true))
+                .arg(Arg::new("dump type").help("Type of the dump").required(true))
                 .arg(
                     Arg::new("dir")
                         .short('d')
                         .long("dir")
-                        .about("Directory with the dump files")
+                        .help("Directory with the dump files")
                         .takes_value(true),
                 ),
         )
@@ -335,7 +332,7 @@ async fn run() -> Result<()> {
             App::new("list-dates")
                 .about("List all dump dates available for this wiki")
                 .arg(wiki_name_arg.clone())
-                .arg(Arg::new("dump type").about("Type of the dump").required(false)),
+                .arg(Arg::new("dump type").help("Type of the dump").required(false)),
         )
         .subcommand(
             App::new("list-dumps")
