@@ -11,7 +11,7 @@ license = "MIT"
 regex = "1"
 thiserror = "1.0.30"
 reqwest = "0.11"
-tokio = { version = "1.13", features = ["macros", "process"] }
+tokio = { version = "1.15", features = ["macros", "process"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 sha-1 = "0.10.0"
