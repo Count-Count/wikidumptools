@@ -11,7 +11,7 @@ use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
 
-use clap::{crate_authors, crate_version, App, Arg};
+use clap::{crate_authors, crate_version, Command, Arg};
 use lib::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -25,7 +25,7 @@ fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
     process::exit(1);
 }
 fn main() {
-    let matches = App::new("WikiDumpGrep")
+    let matches = Command::new("WikiDumpGrep")
         .version(crate_version!())
         .author(crate_authors!())
         .about("Search through Wikipedia and other Wikimedia wiki dumps using regular expressions.")
@@ -39,7 +39,7 @@ fn main() {
             Arg::new("namespaces")
                 .long("ns")
                 .takes_value(true)
-                .use_delimiter(true)
+                .use_value_delimiter(true)
                 .help("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(

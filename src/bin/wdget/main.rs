@@ -14,7 +14,7 @@ use std::process;
 use std::time::Instant;
 
 use anyhow::{anyhow, bail, Result};
-use clap::{crate_authors, crate_version, App, AppSettings, Arg};
+use clap::{crate_authors, crate_version, Command, AppSettings, Arg};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
@@ -267,14 +267,15 @@ async fn run() -> Result<()> {
         .help("Date of the dump (YYYYMMDD or 'latest')")
         .required(true);
 
-    let matches = App::new("WikiDumpGet")
+    let matches = Command::new("WikiDumpGet")
         .version(crate_version!())
         .author(crate_authors!())
         .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
         .setting(AppSettings::DeriveDisplayOrder)
         .subcommand(
-            App::new("download")
+            Command::new("download")
                 .about("Download a wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
@@ -314,7 +315,7 @@ async fn run() -> Result<()> {
                 ),
         )
         .subcommand(
-            App::new("verify")
+            Command::new("verify")
                 .about("Verify an already downloaded wiki dump")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg.clone())
@@ -327,15 +328,15 @@ async fn run() -> Result<()> {
                         .takes_value(true),
                 ),
         )
-        .subcommand(App::new("list-wikis").about("List all wikis for which dumps are available"))
+        .subcommand(Command::new("list-wikis").about("List all wikis for which dumps are available"))
         .subcommand(
-            App::new("list-dates")
+            Command::new("list-dates")
                 .about("List all dump dates available for this wiki")
                 .arg(wiki_name_arg.clone())
                 .arg(Arg::new("dump type").help("Type of the dump").required(false)),
         )
         .subcommand(
-            App::new("list-dumps")
+            Command::new("list-dumps")
                 .about("List all dumps available for this wiki at this date")
                 .arg(wiki_name_arg.clone())
                 .arg(dump_date_arg),
