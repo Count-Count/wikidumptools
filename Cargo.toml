@@ -28,7 +28,7 @@ tokio = { version = "1.16", features = ["rt", "macros", "time", "signal", "proce
 sha-1 = "0.10.0"
 lazy_static = "1.4"
 tabwriter = "1.2.1"
-simdutf8 = "0.1.1"
+simdutf8 = "0.1.4"
 mimalloc = "0.1.26"
 
 [patch.crates-io]
