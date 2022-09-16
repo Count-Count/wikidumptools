@@ -66,7 +66,7 @@ impl From<quick_xml::Error> for Error {
     #[inline]
     fn from(error: quick_xml::Error) -> Self {
         match error {
-            quick_xml::Error::Utf8(e) => Self::StdUtf8(e),
+            quick_xml::Error::NonDecodable(e) => Self::StdUtf8(e.expect("NonDecodable should contain an UTF8Error")),
             quick_xml::Error::Io(e) => Self::Io(e),
             error => Self::Xml(error),
         }
@@ -85,10 +85,9 @@ fn read_str_and_then<T: BufRead, ResT, F>(
 where
     F: FnMut(&str) -> Result<ResT>,
 {
-    if let Event::Text(escaped_text) = reader.read_event(buf)? {
-        let unescaped_text = escaped_text.unescaped()?;
-        let text = from_utf8(&unescaped_text)?;
-        f(text)
+    if let Event::Text(escaped_text) = reader.read_event_into(buf)? {
+        let unescaped_text = escaped_text.unescape()?;
+        f(&unescaped_text)
     } else {
         Err(Error::OnlyTextExpectedInTag(tag.to_owned()))
     }
@@ -104,9 +103,9 @@ fn read_bytes_and_then<T: BufRead, ResT, F>(
 where
     F: FnMut(&[u8]) -> Result<ResT>,
 {
-    if let Event::Text(escaped_text) = reader.read_event(buf)? {
-        let unescaped_text = escaped_text.unescaped()?;
-        f(&unescaped_text)
+    if let Event::Text(escaped_text) = reader.read_event_into(buf)? {
+        let unescaped_text = escaped_text.unescape()?;
+        f(&unescaped_text.as_bytes())
     } else {
         Err(Error::OnlyTextExpectedInTag(tag.to_owned()))
     }
@@ -124,11 +123,11 @@ fn skip_to_start_tag_or_eof<T: BufRead>(
     tag_name: &[u8],
 ) -> Result<SkipToStartTagOrEofResult> {
     loop {
-        match reader.read_event(buf)? {
-            Event::Start(ref e) if e.name() == tag_name => {
+        match reader.read_event_into(buf)? {
+            Event::Start(ref e) if e.name().local_name().into_inner() == tag_name => {
                 return Ok(SkipToStartTagOrEofResult::StartTagFound);
             }
-            Event::Empty(ref e) if e.name() == tag_name => {
+            Event::Empty(ref e) if e.name().local_name().into_inner() == tag_name => {
                 return Err(Error::UnexpectedEmptyTag(from_utf8(tag_name)?.to_owned()));
             }
             Event::Eof => {
@@ -162,12 +161,12 @@ fn skip_to_start_tag_or_empty_tag<T: BufRead>(
     tag_name: &[u8],
 ) -> Result<SkipToStartTagOrEmptyTagResult> {
     loop {
-        let event = reader.read_event(buf)?;
+        let event = reader.read_event_into(buf)?;
         match event {
-            Event::Start(ref e) if e.name() == tag_name => {
+            Event::Start(ref e) if e.name().local_name().into_inner() == tag_name => {
                 return Ok(SkipToStartTagOrEmptyTagResult::StartTagFound);
             }
-            Event::Empty(ref e) if e.name() == tag_name => {
+            Event::Empty(ref e) if e.name().local_name().into_inner() == tag_name => {
                 return Ok(SkipToStartTagOrEmptyTagResult::EmptyTagFound);
             }
             Event::Eof => {
@@ -424,8 +423,8 @@ fn search_dump_reader<B: BufRead>(
             break;
         }
         loop {
-            match reader.read_event(&mut buf)? {
-                Event::Start(ref e) => match e.name() {
+            match reader.read_event_into(&mut buf)? {
+                Event::Start(ref e) => match e.name().local_name().into_inner() {
                     b"title" => {
                         read_str_and_then(&mut reader, &mut buf, "title", |text| {
                             title.clear();
@@ -477,7 +476,7 @@ fn search_dump_reader<B: BufRead>(
                     }
                     _other_tag => { /* ignore */ }
                 },
-                Event::End(bytes_end) if bytes_end.name() == b"page" => {
+                Event::End(bytes_end) if bytes_end.name().local_name().into_inner() == b"page" => {
                     break;
                 }
                 Event::Eof => return Err(Error::Xml(quick_xml::Error::UnexpectedEof("page".to_owned()))),
