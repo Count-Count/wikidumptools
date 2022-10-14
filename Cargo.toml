@@ -29,7 +29,7 @@ sha-1 = "0.10.0"
 lazy_static = "1.4"
 tabwriter = "1.2.1"
 simdutf8 = "0.1.1"
-mimalloc = "0.1.26"
+mimalloc = "0.1.30"
 
 [patch.crates-io]
 termcolor = { version = "1.1.2", git = "https://github.com/Count-Count/termcolor.git", branch="windows-utf8-console-bug-workaround" }
