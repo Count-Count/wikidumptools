@@ -382,7 +382,7 @@ fn search_dump_part(
     restrict_namespaces: Option<&[&str]>,
     only_print_title: bool,
 ) -> Result<u64> {
-    let mut file = File::open(&dump_file)?;
+    let mut file = File::open(dump_file)?;
     file.seek(SeekFrom::Start(start))?;
     let buf_size = 2 * 1024 * 1024;
     let mut buf_reader = BufReader::with_capacity(buf_size, file);

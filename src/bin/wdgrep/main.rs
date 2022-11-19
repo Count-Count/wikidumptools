@@ -11,7 +11,7 @@ use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
 
-use clap::{crate_authors, crate_version, Command, Arg};
+use clap::{crate_authors, crate_version, Arg, Command};
 use lib::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -66,7 +66,7 @@ fn main() {
             Arg::new("color")
                 .long("color")
                 .takes_value(true)
-                .possible_values(&["always", "auto", "never"])
+                .possible_values(["always", "auto", "never"])
                 .value_name("mode")
                 .help("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )

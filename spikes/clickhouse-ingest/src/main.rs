@@ -339,7 +339,7 @@ async fn main() -> Result<()> {
             command = Command::new("bzcat");
         } else {
             command = Command::new("7z");
-            command.args(&["e", "-so"]);
+            command.args(["e", "-so"]);
         }
         // necessary on Windows otherwise terminal colors are messed up with MSYS binaries (even /bin/false)
         command.stderr(Stdio::piped()).stdin(Stdio::piped());

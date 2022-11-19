@@ -180,7 +180,7 @@ fn get_target_file_name(file_name: &str, decompress: bool) -> &str {
 
 fn get_file_in_dir(directory: &Path, file_name: &str) -> PathBuf {
     let mut file = directory.to_owned();
-    file.push(&file_name);
+    file.push(file_name);
     file
 }
 

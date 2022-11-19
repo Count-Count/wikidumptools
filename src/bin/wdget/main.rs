@@ -14,7 +14,7 @@ use std::process;
 use std::time::Instant;
 
 use anyhow::{anyhow, bail, Result};
-use clap::{crate_authors, crate_version, Command, AppSettings, Arg};
+use clap::{crate_authors, crate_version, AppSettings, Arg, Command};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
@@ -207,7 +207,7 @@ where
                         let bytes_per_sec = (bytes_received - prev_bytes_received) as f64 / prev_time.elapsed().as_secs_f64();
                         std::format!("({}/s)", get_human_size(bytes_per_sec as u64))
                     } else {
-                        std::format!("(stalled)")
+                        "(stalled)".to_string()
                     };
                     let mut progress_string =
                         if let Some(total_data_size) = total_data_size {
