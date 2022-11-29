@@ -25,7 +25,7 @@ thiserror = "1.0.30"
 anyhow = "1.0"
 reqwest = "0.11"
 tokio = { version = "1.16", features = ["rt", "macros", "time", "signal", "process", "sync"] }
-sha-1 = "0.10.0"
+sha-1 = "0.10.1"
 lazy_static = "1.4"
 tabwriter = "1.2.1"
 simdutf8 = "0.1.1"
