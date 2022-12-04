@@ -49,7 +49,7 @@ async fn list_wikis(client: &Client) -> Result<()> {
 async fn list_dates(client: &Client, wiki: &str) -> Result<()> {
     let dates = get_available_dates(client, wiki).await?;
     for date in dates {
-        println!("{}", date);
+        println!("{date}");
     }
     Ok(())
 }
@@ -82,15 +82,15 @@ fn get_human_size(byte_len: u64) -> String {
     let mut len = byte_len as f64;
     let units = ["KiB", "MiB", "GiB", "TiB", "PiB"];
     if len < 1000.0 {
-        return std::format!("{:.0} bytes", len);
+        return std::format!("{len:.0} bytes");
     }
     for unit in units {
         len /= 1024.0;
         if len < 1000.0 {
-            return std::format!("{:.2} {}", len, unit);
+            return std::format!("{len:.2} {unit}");
         }
     }
-    std::format!("{:6.2} PiB", len)
+    std::format!("{len:6.2} PiB")
 }
 
 fn check_date_valid(date_spec: &str) -> Result<()> {
@@ -180,7 +180,7 @@ where
                     },
                     Some(ExistingFileIgnored(_path, file_name)) => {
                         if show_warnings {
-                            eprintln!("{} exists, skipping.", file_name);
+                            eprintln!("{file_name} exists, skipping.");
                         }
                     },
                     Some(FileFinished(_path, file_name)) => {
@@ -229,7 +229,7 @@ where
                     for _ in new_printed_progress_len..last_printed_progress_len {
                         progress_string.push(' ');
                     }
-                    eprint!("{}", progress_string);
+                    eprint!("{progress_string}");
                     std::io::stderr().flush().unwrap();
                     last_printed_progress_len = new_printed_progress_len;
                     prev_bytes_received = bytes_received;
@@ -251,7 +251,7 @@ where
                     decompressed_bytes_written as f64 / 1024.0 / 1024.0
                 );
             } else {
-                eprintln!("\rDownloaded {:.2} MiB ({:.2} MiB/s).", total_mib, mib_per_sec);
+                eprintln!("\rDownloaded {total_mib:.2} MiB ({mib_per_sec:.2} MiB/s).");
             }
         } else {
             eprintln!("No files downloaded.");
@@ -358,7 +358,7 @@ async fn run() -> Result<()> {
             let wiki = subcommand_matches.get_one::<String>("wiki name").unwrap();
             let date_spec = subcommand_matches.get_one::<String>("dump date").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, None).await?;
-            eprintln!("Listing dumps for {}, dump run from {}", wiki, date);
+            eprintln!("Listing dumps for {wiki}, dump run from {date}");
             list_types(&client, wiki, &date).await?;
         }
 
@@ -439,7 +439,7 @@ async fn run() -> Result<()> {
 async fn main() {
     let res = run().await;
     if let Err(e) = res {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         process::exit(1);
     }
 }

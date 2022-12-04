@@ -63,7 +63,7 @@ async fn update(credentials: Option<WikiCredentials<'_>>) -> Result<()> {
                 page_to_last_revision.entry(pageid).or_insert(revid);
                 rev_count += 1;
             }
-            Some(x) => println!("type: {}: {}", x, val),
+            Some(x) => println!("type: {x}: {val}"),
             None => {}
         }
     }

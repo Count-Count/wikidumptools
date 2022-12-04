@@ -331,7 +331,7 @@ pub fn search_dump(regex: &str, dump_files: &[String], search_options: &SearchOp
                     search_options.only_print_title,
                 );
                 if search_res.is_err() {
-                    eprintln!("Error searching {}", dump_file);
+                    eprintln!("Error searching {dump_file}");
                 }
                 let bytes_processed_0 = search_res?;
                 compressed_file_found.fetch_or(true, Ordering::Relaxed);

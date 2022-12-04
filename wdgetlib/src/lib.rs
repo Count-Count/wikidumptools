@@ -132,7 +132,7 @@ pub struct DumpFileInfo {
 }
 
 pub async fn get_dump_status(client: &Client, wiki: &str, date: &str) -> Result<DumpStatus> {
-    let url = format!("https://dumps.wikimedia.org/{}/{}/dumpstatus.json", wiki, date);
+    let url = format!("https://dumps.wikimedia.org/{wiki}/{date}/dumpstatus.json");
     let r = client.get(url.as_str()).send().await?.error_for_status().map_err(|e| {
         if let Some(StatusCode::NOT_FOUND) = e.status() {
             Error::DumpStatusFileNotFound()
@@ -187,7 +187,7 @@ fn get_file_in_dir(directory: &Path, file_name: &str) -> PathBuf {
 fn verify_hash(expected_sha1: Option<&String>, hasher: Sha1, file_path: &Path) -> Result<()> {
     if let Some(expected_sha1) = expected_sha1 {
         let sha1_bytes = hasher.finalize();
-        let actual_sha1 = format!("{:x}", sha1_bytes);
+        let actual_sha1 = format!("{sha1_bytes:x}");
         if expected_sha1 != &actual_sha1 {
             return Err(Error::DumpFileAccessError(
                 file_path.to_owned(),
@@ -243,10 +243,7 @@ async fn download_file(
         .write(true)
         .open(&partfile_path)
         .map_err(|e| {
-            Error::DumpFileAccessError(
-                partfile_path.clone(),
-                std::format!("Could not create part file: {0}", e),
-            )
+            Error::DumpFileAccessError(partfile_path.clone(), std::format!("Could not create part file: {e}"))
         })?;
 
     let progress_send_clone = progress_send.clone();
@@ -308,7 +305,7 @@ async fn download_file(
                 if read_len > 0 {
                     let write_buf = &buf[..read_len];
                     partfile.write_all(write_buf).map_err(|e| {
-                        Error::DumpFileAccessError(partfile_path.clone(), std::format!("Write error: {0}", e))
+                        Error::DumpFileAccessError(partfile_path.clone(), std::format!("Write error: {e}"))
                     })?;
                     if let Some(ref progress_send) = progress_send {
                         progress_send.send(DownloadProgress::DecompressedBytesWrittenToDisk(read_len as u64))?;
@@ -331,7 +328,7 @@ async fn download_file(
             }
             partfile
                 .write_all(chunk.as_ref())
-                .map_err(|e| Error::DumpFileAccessError(partfile_path.clone(), std::format!("Write error: {0}", e)))?;
+                .map_err(|e| Error::DumpFileAccessError(partfile_path.clone(), std::format!("Write error: {e}")))?;
             if let Some(ref progress_send) = progress_send {
                 progress_send.send(DownloadProgress::BytesReadFromNet(chunk.len() as u64))?;
             }
@@ -340,10 +337,7 @@ async fn download_file(
     }
 
     std::fs::rename(&partfile_path, &file_path).map_err(|e| {
-        Error::DumpFileAccessError(
-            partfile_path.clone(),
-            std::format!("Could not rename part file: {0}", e),
-        )
+        Error::DumpFileAccessError(partfile_path.clone(), std::format!("Could not rename part file: {e}"))
     })?;
 
     Ok(())
@@ -415,7 +409,7 @@ where
                 }
             }
         }
-        let url = format!("{}/{}/{}/{}", root_url, wiki, date, file_name);
+        let url = format!("{root_url}/{wiki}/{date}/{file_name}");
         let download_res = download_file(
             url,
             target_file_path.clone(),
@@ -463,7 +457,7 @@ where
 }
 
 pub async fn get_available_dates(client: &Client, wiki: &str) -> Result<Vec<String>> {
-    let url = format!("https://dumps.wikimedia.org/{}/", wiki);
+    let url = format!("https://dumps.wikimedia.org/{wiki}/");
     let r = client.get(url.as_str()).send().await?.error_for_status()?;
     lazy_static! {
         static ref RE: Regex = Regex::new(r#"<a href="([1-9][0-9]{7})/">([1-9][0-9]{7})/</a>"#)

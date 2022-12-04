@@ -58,7 +58,7 @@ fn verify_existing_file(file_path: &Path, file_name: &str, file_data: &DumpFileI
     let file_metadata = fs::metadata(file_path).map_err(|e| {
         Error::DumpFileAccessError(
             file_path.to_owned(),
-            std::format!("Could not get file information: {0}", e),
+            std::format!("Could not get file information: {e}"),
         )
     })?;
     if let Some(expected_file_size) = &file_data.size {
@@ -76,19 +76,19 @@ fn verify_existing_file(file_path: &Path, file_name: &str, file_data: &DumpFileI
     match file_data.sha1.as_ref() {
         Some(expected_sha1) => {
             let mut file = fs::File::open(file_path).map_err(|e| {
-                Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {}", e))
+                Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {e}"))
             })?;
             if verbose {
-                eprint!("Verifying {}...", file_name);
+                eprint!("Verifying {file_name}...");
                 std::io::stderr().flush().unwrap();
             }
             let start_time = Instant::now();
             let mut hasher = Sha1::new();
             let hashed_bytes = std::io::copy(&mut file, &mut hasher).map_err(|e| {
-                Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {}", e))
+                Error::DumpFileAccessError(file_path.to_owned(), std::format!("Could not read mapping file: {e}"))
             })?;
             let sha1_bytes = hasher.finalize();
-            let actual_sha1 = format!("{:x}", sha1_bytes);
+            let actual_sha1 = format!("{sha1_bytes:x}");
             if expected_sha1 != &actual_sha1 {
                 return Err(Error::DumpFileAccessError(
                     file_path.to_owned(),

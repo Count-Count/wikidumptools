@@ -20,7 +20,7 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn exit_with_error(stderr: &mut StandardStream, msg: &str) -> ! {
     stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-    writeln!(stderr, "{}", msg).unwrap();
+    writeln!(stderr, "{msg}").unwrap();
     stderr.reset().unwrap();
     process::exit(1);
 }
@@ -117,7 +117,7 @@ fn main() {
     }
 
     let (dump_files, total_size) = get_dump_files(dump_file_or_prefix).unwrap_or_else(|err| {
-        exit_with_error(&mut stderr, format!("{}", err).as_str());
+        exit_with_error(&mut stderr, format!("{err}").as_str());
     });
 
     let mut search_options = SearchOptions::new();
@@ -190,15 +190,15 @@ fn main() {
                 if compressed_files_found {
                     write!(stderr, "Searched ").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
-                    write!(stderr, "{:.2}", mib_read).unwrap();
+                    write!(stderr, "{mib_read:.2}").unwrap();
                     stderr.reset().unwrap();
                     write!(stderr, " MiB compressed, ").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
-                    write!(stderr, "{:.2}", mib_read_uncompressed).unwrap();
+                    write!(stderr, "{mib_read_uncompressed:.2}").unwrap();
                     stderr.reset().unwrap();
                     write!(stderr, " MiB uncompressed in ").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
-                    write!(stderr, "{:.2}", elapsed_seconds).unwrap();
+                    write!(stderr, "{elapsed_seconds:.2}").unwrap();
                     stderr.reset().unwrap();
                     write!(stderr, " seconds (").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
@@ -212,11 +212,11 @@ fn main() {
                 } else {
                     write!(stderr, "Searched ").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
-                    write!(stderr, "{:.2}", mib_read).unwrap();
+                    write!(stderr, "{mib_read:.2}").unwrap();
                     stderr.reset().unwrap();
                     write!(stderr, " MiB in ").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
-                    write!(stderr, "{:.2}", elapsed_seconds).unwrap();
+                    write!(stderr, "{elapsed_seconds:.2}").unwrap();
                     stderr.reset().unwrap();
                     write!(stderr, " seconds (").unwrap();
                     stderr.set_color(&number_hl_color).unwrap();
@@ -227,7 +227,7 @@ fn main() {
             }
         }
         Err(err) => {
-            exit_with_error(&mut stderr, format!("Error during search: {}", err).as_str());
+            exit_with_error(&mut stderr, format!("Error during search: {err}").as_str());
         }
     }
 }

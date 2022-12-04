@@ -113,9 +113,9 @@ async fn process_stream<T: BufRead + Send>(
     let mut deserializer = Deserializer::new(reader);
     let mut record_count: u32 = 0;
     let table = if fill_revision_table {
-        format!("{}.revision", database_name)
+        format!("{database_name}.revision")
     } else {
-        format!("{}.latest", database_name)
+        format!("{database_name}.latest")
     };
     let mut block = Block::with_capacity(1000);
     loop {
@@ -252,7 +252,7 @@ async fn main() -> Result<()> {
 
     let create_revision_stmt = format!(
         "
-    CREATE TABLE IF NOT EXISTS {}.revision
+    CREATE TABLE IF NOT EXISTS {database_name}.revision
     (
         pageid UInt32 CODEC(Delta, ZSTD),
         namespace Int16 CODEC(Delta, ZSTD),
@@ -279,12 +279,11 @@ async fn main() -> Result<()> {
     ENGINE = MergeTree()
 --    PARTITION BY toYYYYMM(timestamp)
     PRIMARY KEY (pageid, timestamp)
-    ",
-        database_name
+    "
     );
     let create_latest_stmt = format!(
         "
-    CREATE TABLE IF NOT EXISTS {}.latest
+    CREATE TABLE IF NOT EXISTS {database_name}.latest
     (
         pageid UInt32 CODEC(Delta, ZSTD),
         namespace Int16 CODEC(Delta, ZSTD),
@@ -310,14 +309,13 @@ async fn main() -> Result<()> {
     )
     ENGINE = ReplacingMergeTree(revisionid)
     ORDER BY pageid
-    ",
-        database_name
+    "
     );
     let pool = Pool::new(database_url);
     let mut client = pool.get_handle().await?;
     if !dry_run {
         client
-            .execute(format!("CREATE DATABASE IF NOT EXISTS {}", database_name))
+            .execute(format!("CREATE DATABASE IF NOT EXISTS {database_name}"))
             .await?;
         // client
         //     .execute(format!("DROP TABLE IF EXISTS {}.revision", database_name))
