@@ -1,2 +1,4 @@
 /target
 /testfiles
+.DS_Store
+/.vscode
