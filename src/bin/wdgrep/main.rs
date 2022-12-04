@@ -38,7 +38,7 @@ fn main() {
         .arg(
             Arg::new("namespaces")
                 .long("ns")
-                .use_value_delimiter(true)
+                .value_delimiter(',')
                 .help("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
         .arg(
