@@ -14,7 +14,7 @@ use std::process;
 use std::time::Instant;
 
 use anyhow::{anyhow, bail, Result};
-use clap::{crate_authors, crate_version, AppSettings, Arg, Command};
+use clap::{crate_authors, crate_version, Arg, ArgAction, Command};
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::Client;
@@ -273,7 +273,6 @@ async fn run() -> Result<()> {
         .about("Download Wikipedia and other Wikimedia wiki dumps from the internet.")
         .subcommand_required(true)
         .arg_required_else_help(true)
-        .setting(AppSettings::DeriveDisplayOrder)
         .subcommand(
             Command::new("download")
                 .about("Download a wiki dump")
@@ -284,35 +283,31 @@ async fn run() -> Result<()> {
                     Arg::new("quiet")
                         .short('q')
                         .long("quiet")
-                        .help("Don't print progress updates"),
+                        .help("Don't print progress updates")
+                        .action(ArgAction::SetTrue),
                 )
                 .arg(
                     Arg::new("decompress")
                         .short('d')
                         .long("decompress")
-                        .help("Decompress .bz2 files during download"),
+                        .help("Decompress .bz2 files during download")
+                        .action(ArgAction::SetTrue),
                 )
                 .arg(
                     Arg::new("target-dir")
                         .short('t')
                         .long("target-dir")
-                        .help("Target directory")
-                        .takes_value(true),
+                        .help("Target directory"),
                 )
                 .arg(
                     Arg::new("mirror")
                         .short('m')
                         .long("mirror")
-                        .help("Mirror root URL or one of the shortcuts 'acc.umu.se', 'your.org' and 'bringyour.com'")
-                        .takes_value(true),
+                        .help("Mirror root URL or one of the shortcuts 'acc.umu.se', 'your.org' and 'bringyour.com'"),
                 )
-                .arg(
-                    Arg::new("concurrency")
-                        .short('j')
-                        .long("concurrency")
-                        .help("Number of parallel connections, defaults to 1 if no mirror, determined heuristically otherwise.")
-                        .takes_value(true),
-                ),
+                .arg(Arg::new("concurrency").short('j').long("concurrency").help(
+                    "Number of parallel connections, defaults to 1 if no mirror, determined heuristically otherwise.",
+                )),
         )
         .subcommand(
             Command::new("verify")
@@ -324,8 +319,7 @@ async fn run() -> Result<()> {
                     Arg::new("dir")
                         .short('d')
                         .long("dir")
-                        .help("Directory with the dump files")
-                        .takes_value(true),
+                        .help("Directory with the dump files"),
                 ),
         )
         .subcommand(Command::new("list-wikis").about("List all wikis for which dumps are available"))
@@ -355,14 +349,14 @@ async fn run() -> Result<()> {
         "list-dates" => {
             // todo: check args: wiki name, handle optional type, handle no dump found condition
             let subcommand_matches = matches.subcommand_matches("list-dates").unwrap();
-            list_dates(&client, subcommand_matches.value_of("wiki name").unwrap()).await?;
+            list_dates(&client, subcommand_matches.get_one::<String>("wiki name").unwrap()).await?;
         }
 
         "list-dumps" => {
             // todo: check args: wiki name; handle wiki/date not found, dump status file does not exist (yet)
             let subcommand_matches = matches.subcommand_matches("list-dumps").unwrap();
-            let wiki = subcommand_matches.value_of("wiki name").unwrap();
-            let date_spec = subcommand_matches.value_of("dump date").unwrap();
+            let wiki = subcommand_matches.get_one::<String>("wiki name").unwrap();
+            let date_spec = subcommand_matches.get_one::<String>("dump date").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, None).await?;
             eprintln!("Listing dumps for {}, dump run from {}", wiki, date);
             list_types(&client, wiki, &date).await?;
@@ -371,18 +365,18 @@ async fn run() -> Result<()> {
         "download" => {
             // todo: check args
             let subcommand_matches = matches.subcommand_matches("download").unwrap();
-            let wiki = subcommand_matches.value_of("wiki name").unwrap();
-            let date_spec = subcommand_matches.value_of("dump date").unwrap();
-            let dump_type = subcommand_matches.value_of("dump type").unwrap();
+            let wiki = subcommand_matches.get_one::<String>("wiki name").unwrap();
+            let date_spec = subcommand_matches.get_one::<String>("dump date").unwrap();
+            let dump_type = subcommand_matches.get_one::<String>("dump type").unwrap();
             let date = check_date_may_retrieve_latest(&client, wiki, date_spec, Some(dump_type)).await?;
-            let target_dir = match subcommand_matches.value_of("target-dir") {
+            let target_dir = match subcommand_matches.get_one::<String>("target-dir") {
                 None => current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?,
                 Some(dir) => PathBuf::from(dir),
             };
             if !target_dir.is_dir() {
                 bail!("Target directory does not exist or is not accessible.")
             };
-            let mirror = match subcommand_matches.value_of("mirror") {
+            let mirror = match subcommand_matches.get_one::<String>("mirror").map(String::as_str) {
                 Some("acc.umu.se") => Some("https://ftp.acc.umu.se/mirror/wikimedia.org/dumps"),
                 Some("your.org") => Some("http://dumps.wikimedia.your.org/"),
                 Some("bringyour.com") => Some("https://wikimedia.bringyour.com/"),
@@ -391,8 +385,8 @@ async fn run() -> Result<()> {
             };
 
             let concurrency = subcommand_matches
-                .value_of("concurrency")
-                .map(str::parse::<NonZeroUsize>)
+                .get_one::<String>("concurrency")
+                .map(|s| str::parse::<NonZeroUsize>(s))
                 .transpose()
                 .map_err(|_| anyhow!("Invalid number for concurrency option."))?;
             match concurrency {
@@ -404,11 +398,11 @@ async fn run() -> Result<()> {
 
             let download_options = DownloadOptions {
                 mirror,
-                decompress: subcommand_matches.is_present("decompress"),
+                decompress: subcommand_matches.get_flag("decompress"),
                 concurrency,
             };
-            let show_progress = !subcommand_matches.is_present("quiet") && atty::is(atty::Stream::Stderr);
-            let show_warnings = !subcommand_matches.is_present("quiet");
+            let show_progress = !subcommand_matches.get_flag("quiet") && atty::is(atty::Stream::Stderr);
+            let show_warnings = !subcommand_matches.get_flag("quiet");
             download(
                 &client,
                 wiki,
@@ -423,11 +417,11 @@ async fn run() -> Result<()> {
         }
         "verify" => {
             let subcommand_matches = matches.subcommand_matches("verify").unwrap();
-            let wiki = subcommand_matches.value_of("wiki name").unwrap();
-            let date_spec = subcommand_matches.value_of("dump date").unwrap();
+            let wiki = subcommand_matches.get_one::<String>("wiki name").unwrap();
+            let date_spec = subcommand_matches.get_one::<String>("dump date").unwrap();
             check_date_valid(date_spec)?;
-            let dump_type = subcommand_matches.value_of("dump type").unwrap();
-            let dump_files_dir = match subcommand_matches.value_of("dir") {
+            let dump_type = subcommand_matches.get_one::<String>("dump type").unwrap();
+            let dump_files_dir = match subcommand_matches.get_one::<String>("dir") {
                 None => current_dir().map_err(|e| anyhow!("Current directory not accessible: {}", e))?,
                 Some(dir) => PathBuf::from(dir),
             };

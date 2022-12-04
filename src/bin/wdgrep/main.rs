@@ -11,7 +11,8 @@ use std::num::NonZeroUsize;
 use std::process;
 use std::time::Instant;
 
-use clap::{crate_authors, crate_version, Arg, Command};
+use clap::builder::PossibleValuesParser;
+use clap::{crate_authors, crate_version, Arg, ArgAction, Command};
 use lib::{get_dump_files, search_dump, SearchDumpResult, SearchOptions};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -38,7 +39,6 @@ fn main() {
         .arg(
             Arg::new("namespaces")
                 .long("ns")
-                .takes_value(true)
                 .use_value_delimiter(true)
                 .help("Restrict search to those namespaces (comma-separated list of numeric namespaces)"),
         )
@@ -46,63 +46,57 @@ fn main() {
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
-                .help("Print performance statistics"),
+                .help("Print performance statistics")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("revisions-with-matches")
                 .short('l')
                 .long("revisions-with-matches")
-                .help("Only list title and revision of articles containing matching text"),
+                .help("Only list title and revision of articles containing matching text")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("threads")
                 .short('j')
                 .long("threads")
-                .takes_value(true)
                 .value_name("num")
                 .help("Number of parallel threads to use. The default is the number of logical cpus."),
         )
         .arg(
             Arg::new("color")
                 .long("color")
-                .takes_value(true)
-                .possible_values(["always", "auto", "never"])
+                .value_parser(PossibleValuesParser::new(["always", "auto", "never"]))
+                .default_value("auto")
                 .value_name("mode")
                 .help("Colorize output, defaults to \"auto\" - output is colorized only if a terminal is detected"),
         )
         .arg(
             Arg::new("7z-binary")
                 .long("7z-binary")
-                .takes_value(true)
                 .value_name("path")
                 .help("Binary for extracting text from .7z files, defaults to \"7z\"."),
         )
         .arg(
-            Arg::new("7z-options")
-                .long("7z-options")
-                .takes_value(true)
-                .value_name("options")
-                .help(
-                    "Options passed to 7z binary for extracting text from .7z files to stdout, defaults to \"e -so\".",
-                ),
+            Arg::new("7z-options").long("7z-options").value_name("options").help(
+                "Options passed to 7z binary for extracting text from .7z files to stdout, defaults to \"e -so\".",
+            ),
         )
         .arg(
             Arg::new("bzcat-binary")
                 .long("bzcat-binary")
-                .takes_value(true)
                 .value_name("path")
                 .help("Binary for extracting text from .bz2 files to stdout, defaults to \"bzcat\"."),
         )
         .arg(
             Arg::new("bzcat-options")
                 .long("bzcat-options")
-                .takes_value(true)
                 .value_name("options")
                 .help("Options passed to bzcat binary for extracting text from .bz2 files, defaults to no options."),
         )
         .get_matches();
 
-    let color_choice = match matches.value_of("color").unwrap_or("auto") {
+    let color_choice = match matches.get_one::<String>("color").unwrap().as_str() {
         "auto" => {
             if atty::is(atty::Stream::Stdout) {
                 ColorChoice::Auto
@@ -117,8 +111,8 @@ fn main() {
 
     let mut stderr = StandardStream::stderr(color_choice);
 
-    let search_term = matches.value_of("search term").unwrap();
-    let dump_file_or_prefix = matches.value_of("dump file or prefix").unwrap();
+    let search_term = matches.get_one::<String>("search term").unwrap();
+    let dump_file_or_prefix = matches.get_one::<String>("dump file or prefix").unwrap();
     if dump_file_or_prefix.is_empty() {
         exit_with_error(&mut stderr, "Non-empty dump file (prefix) needs to be specified.");
     }
@@ -132,38 +126,40 @@ fn main() {
     search_options.with_color_choice(color_choice);
 
     let namespaces: Option<Vec<&str>> = matches
-        .values_of("namespaces")
-        .map(|val| val.map(str::trim).filter(|x| !x.is_empty()).collect());
+        .get_many::<String>("namespaces")
+        .map(|val| val.map(|s| str::trim(s)).filter(|x| !x.is_empty()).collect());
     namespaces
         .as_deref()
         .map(|namespaces| search_options.restrict_namespaces(namespaces));
 
     matches
-        .value_of("threads")
-        .map(str::parse::<NonZeroUsize>)
+        .get_one::<String>("threads")
+        .map(|s| str::parse::<NonZeroUsize>(s))
         .transpose()
         .unwrap_or_else(|_err| {
             exit_with_error(&mut stderr, "Invalid number specified for thread count");
         })
         .map(|thread_count| search_options.with_thread_count(thread_count));
 
-    search_options.only_print_title(matches.is_present("revisions-with-matches"));
+    search_options.only_print_title(matches.get_flag("revisions-with-matches"));
 
     matches
-        .value_of("7z-binary")
+        .get_one::<String>("7z-binary")
         .map(|binary| search_options.with_binary_7z(binary));
 
-    let options_7z = matches.value_of("7z-options").map(|s| s.split(' ').collect::<Vec<_>>());
+    let options_7z = matches
+        .get_one::<String>("7z-options")
+        .map(|s| s.split(' ').collect::<Vec<_>>());
     if let Some(options) = options_7z.as_ref() {
         search_options.with_options_7z(options);
     }
 
     matches
-        .value_of("bzcat-binary")
+        .get_one::<String>("bzcat-binary")
         .map(|binary| search_options.with_binary_bzcat(binary));
 
     let options_bzcat = matches
-        .value_of("bzcat-options")
+        .get_one::<String>("bzcat-options")
         .map(|s| s.split(' ').collect::<Vec<_>>());
     if let Some(options) = options_bzcat.as_ref() {
         search_options.with_options_bzcat(options);
@@ -187,7 +183,7 @@ fn main() {
             let elapsed_seconds = now.elapsed().as_secs_f64();
             let mib_read = total_size as f64 / 1024.0 / 1024.0;
             let mib_read_uncompressed = bytes_processed as f64 / 1024.0 / 1024.0;
-            if matches.is_present("verbose") {
+            if matches.get_flag("verbose") {
                 let mut number_hl_color = ColorSpec::new();
                 number_hl_color.set_fg(Some(Color::Yellow));
 
