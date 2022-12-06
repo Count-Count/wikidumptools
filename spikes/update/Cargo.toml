@@ -5,6 +5,6 @@ authors = ["Count Count <countvoncount123456@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tokio = { version = "1.16", features = ["rt", "macros", "time", "signal"] }
+tokio = { version = "1.23", features = ["rt", "macros", "time", "signal"] }
 thiserror = "1.0.30"
 mediawiki = "0.2.3"
