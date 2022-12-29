@@ -14,7 +14,7 @@ license = "MIT"
 
 [dependencies]
 wdgetlib = { version = "0.0.1", path = "wdgetlib/" }
-quick-xml = "0.23.0"
+quick-xml = "0.27.1"
 regex = "1"
 clap = { version = "4.0.29", features = ["cargo", "deprecated"] }
 memchr = "2.3.3"
